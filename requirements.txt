@@ -19,4 +19,6 @@ umnn==1.68
 yacs==0.1.8
 torchmetrics==0.6.0
 pandas
+transforms3d
+scikit-learn
 git+https://github.com/nkolot/nflows.git

@@ -5,7 +5,7 @@ from typing import Optional, Dict, Tuple
 from nflows.flows import ConditionalGlow
 from yacs.config import CfgNode
 
-from prohmr.utils.geometry import rot6d_to_rotmat
+# from prohmr.utils.geometry import rot6d_to_rotmat
 
 
 class RotFlow(nn.Module):
