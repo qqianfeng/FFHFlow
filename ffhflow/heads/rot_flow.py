@@ -34,17 +34,16 @@ class RotFlow(nn.Module):
             z (torch.Tensor): The Gaussian latent corresponding to each sample with shape (B, N, 144).
         """
 
-        feats = feats.float()  # same as to(torch.float32)  [64,1024]
+        # feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
 
         samples = batch['rot_matrix'] #[64,3,3]
 
-        num_samples = samples.shape[1]
-        feats = feats.reshape(batch_size, 1, -1).repeat(1, num_samples, 1)
+        feats = feats.reshape(batch_size, 1, -1).repeat(1, 1, 1)
 
-        log_prob, z = self.flow.log_prob(samples.reshape(batch_size*num_samples, -1).to(feats.dtype), feats.reshape(batch_size*num_samples, -1))
-        log_prob = log_prob.reshape(batch_size, num_samples)
-        z = z.reshape(batch_size, num_samples, -1)
+        log_prob, z = self.flow.log_prob(samples.reshape(batch_size, -1).to(feats.dtype), feats.reshape(batch_size, -1))
+        log_prob = log_prob.reshape(batch_size, 1)
+        z = z.reshape(batch_size, 1, -1)
         return log_prob, z
 
     def forward(self, feats: torch.Tensor, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None) -> Tuple:
