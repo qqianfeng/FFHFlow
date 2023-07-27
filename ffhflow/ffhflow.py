@@ -90,13 +90,7 @@ class FFHFlow(pl.LightningModule):
         # Necessary to initialize ActNorm layers.
 
         # TODO:
-        # smpl_params = {k: v.clone() for k,v in batch['smpl_params'].items()}
-        # batch_size = smpl_params['body_pose'].shape[0]
-        # has_smpl_params = batch['has_smpl_params']['body_pose'] > 0
-        # smpl_params['body_pose'] = aa_to_rotmat(smpl_params['body_pose'].reshape(-1, 3)).reshape(batch_size, -1, 3, 3)[:, :, :, :2].permute(0, 1, 3, 2).reshape(batch_size, 1, -1)[has_smpl_params]
-        # smpl_params['global_orient'] = aa_to_rotmat(smpl_params['global_orient'].reshape(-1, 3)).reshape(batch_size, -1, 3, 3)[:, :, :, :2].permute(0, 1, 3, 2).reshape(batch_size, 1, -1)[has_smpl_params]
-        # smpl_params['betas'] = smpl_params['betas'].unsqueeze(1)[has_smpl_params]
-        # conditioning_feats = conditioning_feats[has_smpl_params]
+        smpl_params = {k: v.clone() for k,v in batch.items()}
         with torch.no_grad():
             _, _ = self.flow.log_prob(batch, conditioning_feats)
             self.initialized = True
