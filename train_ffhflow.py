@@ -8,7 +8,7 @@ from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow import FFHFlow
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='nf_ffhnet/configs/prohmr.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='/tmp/', help='Directory to save logs and checkpoints')
 
 

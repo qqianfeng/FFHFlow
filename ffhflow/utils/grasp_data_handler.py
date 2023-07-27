@@ -3,7 +3,7 @@ import cv2
 import h5py
 import os
 import numpy as np
-from nf_ffhnet.utils.utils import hom_matrix_from_pos_quat_list
+from ffhflow.utils.utils import hom_matrix_from_pos_quat_list
 import argparse
 
 MD = 'metadata'

@@ -8,6 +8,8 @@ import torch.nn.parallel
 import torch.utils.data
 from torch.autograd import Variable
 
+# by default is float 32
+torch.set_default_dtype(torch.float64)
 
 class STN3d(nn.Module):
     def __init__(self):
@@ -39,7 +41,7 @@ class STN3d(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.array([1,0,0,0,1,0,0,0,1]).astype(np.float32))).view(1,9).repeat(batchsize,1)
+        iden = Variable(torch.from_numpy(np.array([1,0,0,0,1,0,0,0,1]).astype(np.float64))).view(1,9).repeat(batchsize,1)
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden
@@ -78,7 +80,7 @@ class STNkd(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float32))).view(1,self.k*self.k).repeat(batchsize,1)
+        iden = Variable(torch.from_numpy(np.eye(self.k).flatten().astype(np.float64))).view(1,self.k*self.k).repeat(batchsize,1)
         if x.is_cuda:
             iden = iden.cuda()
         x = x + iden

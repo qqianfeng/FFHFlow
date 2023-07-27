@@ -12,8 +12,8 @@ import matplotlib.colors as mcolors
 import numpy as np
 
 sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..'))
-from nf_ffhnet.utils.grasp_data_handler import GraspDataHandlerVae
-from nf_ffhnet.utils import utils
+from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
+from ffhflow.utils import utils
 
 try:
     from urdfpy import URDF

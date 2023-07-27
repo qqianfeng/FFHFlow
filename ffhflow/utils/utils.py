@@ -10,7 +10,7 @@ try:
 except:
     print("[WARNING] bps_torch not installed.")
 
-from nf_ffhnet.utils.definitions import HAND_CFG
+from ffhflow.utils.definitions import HAND_CFG
 
 
 def quat_xyzw2wxyz(quat):
@@ -53,14 +53,14 @@ def control_points_from_transl_rot_matrix(transl, rot_matrix, device):
     # Load control points and create tensor
     control_points_np = np.load('../..hithand_palm/hithand_palm_control_points.npy')  # N_points*3
     n_points = control_points_np.shape[0]
-    control_points = torch.Tensor(control_points_np, device=device, dtype=torch.float32)
+    control_points = torch.Tensor(control_points_np, device=device, dtype=torch.float64)
     control_points = control_points.expand(batch_size, control_points.shape[0],
                                            control_points.shape[1])  # batch_size * N_points * 3
     assert control_points.shape == (batch_size, n_points, 3)
 
     # Create tensor transformation matrix
     T = hom_matrix_batch_from_transl_rot_matrix(transl, rot_matrix)  # batch_size * 4 * 4
-    T = T.to(device=device, dtype=torch.float32)
+    T = T.to(device=device, dtype=torch.float64)
     assert T.shape == (batch_size, 4, 4)
 
     # Apply translformations to control points
@@ -349,7 +349,7 @@ def reduce_joint_conf(jc_full):
     return jc_red
 
 
-def rot_matrix_from_ortho6d(ortho6d, dtype=torch.float32,device='cuda'):
+def rot_matrix_from_ortho6d(ortho6d, dtype=torch.float64,device='cuda'):
     x_raw = ortho6d[:, 0:3]  # batch*3
     y_raw = ortho6d[:, 3:6]  # batch*3
 

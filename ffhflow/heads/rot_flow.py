@@ -23,7 +23,7 @@ class RotFlow(nn.Module):
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
 
-    def log_prob(self, smpl_params: Dict, feats: torch.Tensor) -> Tuple:
+    def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
         Compute the log-probability of a set of smpl_params given a batch of images.
         Args:
@@ -34,14 +34,14 @@ class RotFlow(nn.Module):
             z (torch.Tensor): The Gaussian latent corresponding to each sample with shape (B, N, 144).
         """
 
-        feats = feats.float()  # same as to(torch.float32)
+        feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
 
-        samples = torch.cat((smpl_params['global_orient'], smpl_params['body_pose']), dim=-1)
+        samples = batch['rot_matrix'] #[64,3,3]
 
         num_samples = samples.shape[1]
         feats = feats.reshape(batch_size, 1, -1).repeat(1, num_samples, 1)
-        # TODO: where is log_prob, what is z???
+
         log_prob, z = self.flow.log_prob(samples.reshape(batch_size*num_samples, -1).to(feats.dtype), feats.reshape(batch_size*num_samples, -1))
         log_prob = log_prob.reshape(batch_size, num_samples)
         z = z.reshape(batch_size, num_samples, -1)
@@ -83,7 +83,5 @@ class RotFlow(nn.Module):
         pred_pose = rot6d_to_rotmat(pred_pose.reshape(batch_size * num_samples, -1)).view(batch_size, num_samples, self.cfg.SMPL.NUM_BODY_JOINTS+1, 3, 3)
         pred_smpl_params = {'global_orient': pred_pose[:, :, [0]],
                              'body_pose': pred_pose[:, :, 1:]}
-        pred_betas, pred_cam = self.fc_head(pred_smpl_params, feats)
-        pred_smpl_params['betas'] = pred_betas
 
-        return pred_smpl_params, pred_cam, log_prob, z, pred_pose_6d
+        return log_prob, z, pred_pose_6d

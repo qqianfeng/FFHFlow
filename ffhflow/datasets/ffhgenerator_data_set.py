@@ -5,6 +5,7 @@ import pandas as pd
 import sys
 import torch
 from torch.utils import data
+import open3d as o3d
 
 sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..'))
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
@@ -12,7 +13,7 @@ from ffhflow.utils import utils, visualization
 from ffhflow.configs import get_config
 
 class FFHGeneratorDataSet(data.Dataset):
-    def __init__(self, cfg, eval=False, dtype=torch.float32):
+    def __init__(self, cfg, eval=False, dtype=torch.float64):
         super(FFHGeneratorDataSet, self).__init__()
         if eval:
             ds_name = "eval"
@@ -23,7 +24,7 @@ class FFHGeneratorDataSet(data.Dataset):
 
         self.ds_path = os.path.join(cfg.DATASETS.PATH, ds_name)
         self.objs_names = self.get_objs_names(self.ds_path)
-        self.objs_folder = os.path.join(self.ds_path, 'bps')
+        self.objs_folder = os.path.join(self.ds_path, 'pcd')
         self.grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
         self.gazebo_obj_path = cfg.DATASETS.GAZEBO_OBJ_PATH
 
@@ -32,19 +33,17 @@ class FFHGeneratorDataSet(data.Dataset):
         df_name_pos = df[df[ds_name] == 'X'].loc[:, ['Unnamed: 0', 'positive']]
         self.num_success_per_object = dict(
             zip(df_name_pos.iloc[:, 0], df_name_pos.iloc[:, 1].astype('int64')))
-        self.bps_paths, self.grasp_idxs = self.get_all_bps_paths_and_grasp_idxs(
+        self.pcd_paths, self.grasp_idxs = self.get_all_pcd_paths_and_grasp_idxs(
             self.objs_folder, self.num_success_per_object)
 
         self.cfg = cfg
         self.is_debug = False
-        if self.is_debug:
-            print("The size in KB is: ", sys.getsizeof(self.bps_paths) / 1000)
 
     def get_objs_names(self, path):
         objs_folder = os.path.join(path, 'pcd')
         return [obj for obj in os.listdir(objs_folder) if '.' not in obj]
 
-    def get_all_bps_paths_and_grasp_idxs(self, objs_folder, success_per_obj_dict):
+    def get_all_pcd_paths_and_grasp_idxs(self, objs_folder, success_per_obj_dict):
         """ Creates a long list where each of the N bps per object get repeated as many times
         as there are positive grasps for this object. It also returns a list of indexes with the same length as the bps list
         indicating the grasp index. This way each bps is uniquely belonging to each valid grasp ONCE
@@ -67,23 +66,20 @@ class FFHGeneratorDataSet(data.Dataset):
                 elif f_name.split('.')[0].split('_')[-1] == 'obstacle':
                     continue
                 f_path = os.path.join(obj_path, f_name)
-                if 'bps' in os.path.split(f_name)[1]:
+                if '_dspcd' in os.path.split(f_name)[1]:
                     paths += n_success * [f_path]
                     grasp_idxs += range(0, n_success)
 
         assert len(paths) == len(grasp_idxs)
         return paths, grasp_idxs
 
-    def read_pcd_transform(self, bps_path):
-        # pcd save path from bps save path
-        base_path, bps_name = os.path.split(bps_path)
-        pcd_name = bps_name.replace('bps', 'pcd')
-        pcd_name = pcd_name.replace('.npy', '.pcd')
-        path = os.path.join(base_path, pcd_name)
+    def read_pcd_transform(self, pcd_path):
 
         # Extract object name from path
-        head, pcd_file_name = os.path.split(path)
-        pcd_name = pcd_file_name.split('.')[0]
+        head, pcd_file_name = os.path.split(pcd_path)
+        pcd_name = pcd_file_name.replace('_dspcd','_pcd')
+
+        pcd_name = pcd_name.split('.')[0]
         obj = os.path.split(head)[1]
 
         # Read the corresponding transform in
@@ -100,6 +96,13 @@ class FFHGeneratorDataSet(data.Dataset):
         hom_matrix = utils.hom_matrix_from_pos_quat_list(pos_quat_list)
         return hom_matrix
 
+    def _normalize_pc(self, points):
+        centroid = np.mean(points, 0)
+        points -= centroid
+        furthest_distance = np.max(np.sqrt(np.sum(abs(points)**2,axis=-1)))
+        points /= furthest_distance
+        return points
+
     def __getitem__(self, idx):
         """ Batch contains: N random different object bps, each one successful grasp
 
@@ -108,16 +111,16 @@ class FFHGeneratorDataSet(data.Dataset):
         Should fetch one bps for an object + a single grasp for that object.
         Returns a dict with palm_position, palm_orientation, finger_configuration and bps encoding of the object.
         """
-        bps_path = self.bps_paths[idx]
+        pcd_path = self.pcd_paths[idx]
+        pcd = o3d.io.read_point_cloud(pcd_path)
+        pcd_arr = np.asarray(pcd.points)
+
         # Load the bps encoding
-        base_path, bps_name = os.path.split(bps_path)
-        obj_name = '_'.join(bps_name.split('_bps')[:-1])
+        base_path, pcd_name = os.path.split(pcd_path)
+        obj_name = '_'.join(pcd_name.split('_dspcd')[:-1])
 
         # Read the corresponding transform between mesh_frame and object_centroid
-        centr_T_mesh = self.read_pcd_transform(bps_path)
-
-        bps_path = bps_path.replace('multi','single')
-        bps_obj = np.load(bps_path)
+        centr_T_mesh = self.read_pcd_transform(pcd_path)
 
         # Read in a grasp for a given object (in mesh frame)
         palm_pose, joint_conf, _ = self.grasp_data_handler.get_single_successful_grasp(obj_name,
@@ -140,39 +143,45 @@ class FFHGeneratorDataSet(data.Dataset):
         palm_rot_matrix = palm_pose_centr[:3, :3]
         palm_transl = palm_pose_centr[:3, 3]
 
+        # TODO: Normalize pcd and also grasp pose accordingly.
+        pcd_arr = self._normalize_pc(pcd_arr)
+
+        # For pytorch conv1 takes input of (B,C,L) batchsize, channel, length
+        pcd_arr = pcd_arr.reshape((3,-1))
+
         # Test restored grasp
         if self.is_debug:
             print(joint_conf)
             print(palm_transl)
-            visualization.show_dataloader_grasp(bps_path, obj_name, centr_T_mesh, palm_pose_hom,
+            visualization.show_dataloader_grasp(pcd_path, obj_name, centr_T_mesh, palm_pose_hom,
                                                 palm_pose_centr, self.gazebo_obj_path)
 
             # Visualize full hand config
-            visualization.show_grasp_and_object(bps_path, palm_pose_centr, joint_conf)
+            visualization.show_grasp_and_object(pcd_path, palm_pose_centr, joint_conf)
 
         # Build output dict
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'transl': palm_transl,\
                     'joint_conf': joint_conf,\
-                    'bps_object': bps_obj}
+                    'pcd_arr': pcd_arr}
 
         # If we want to evaluate, also return the pcd path to load from for vis
         #if self.cfg["ds_name"] == 'eval':
-        data_out['pcd_path'] = bps_path.replace('bps', 'pcd').replace('npy', 'pcd')
+        data_out['pcd_path'] = pcd_path
         data_out['obj_name'] = obj_name
 
         return data_out
 
     def __len__(self):
         #len of dataset is number of bps per object x num_success_grasps
-        return len(self.bps_paths)
+        return len(self.pcd_paths)
 
 
 if __name__ == '__main__':
     path = os.path.dirname(os.path.abspath(__file__))
     BASE_PATH = os.path.split(os.path.split(path)[0])[0]
 
-    path = os.path.join(BASE_PATH, "nf_ffhnet/configs/prohmr.yaml")
+    path = os.path.join(BASE_PATH, "ffhflow/configs/prohmr.yaml")
     cfg = get_config(path)
     gds = FFHGeneratorDataSet(cfg)
 

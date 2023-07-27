@@ -64,6 +64,8 @@ class FFHFlow(pl.LightningModule):
         self.rec_pose_loss = transl_rot_6D_l2_loss
         self.L2_loss = torch.nn.MSELoss(reduction='mean')
 
+        self.initialized = False
+
     def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
         """
         Setup model and distriminator Optimizers
@@ -77,7 +79,7 @@ class FFHFlow(pl.LightningModule):
 
         return optimizer
 
-    def initialize(self):
+    def initialize(self, batch: Dict, conditioning_feats: torch.Tensor):
         """
         Initialize ActNorm buffers by running a dummy forward step
         Args:
@@ -96,8 +98,8 @@ class FFHFlow(pl.LightningModule):
         # smpl_params['betas'] = smpl_params['betas'].unsqueeze(1)[has_smpl_params]
         # conditioning_feats = conditioning_feats[has_smpl_params]
         with torch.no_grad():
-            _, _ = self.flow.log_prob(smpl_params, conditioning_feats)
-            self.initialized |= True
+            _, _ = self.flow.log_prob(batch, conditioning_feats)
+            self.initialized = True
 
     def forward_step(self, batch: Dict, train: bool = False) -> Dict:
         """
@@ -114,28 +116,27 @@ class FFHFlow(pl.LightningModule):
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
 
 
-        x = batch["point_cloud"]
+        x = batch["pcd_arr"]
         batch_size = x.shape[0]
 
         # Compute keypoint features using the backbone
-        conditioning_feats = self.backbone(x)
+        conditioning_feats, _, _ = self.backbone(x)
 
        # If ActNorm layers are not initialized, initialize them
-        if not self.initialized.item():
+       # TODO:
+        if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
         # If validation draw num_samples - 1 random samples and the zero vector
         if num_samples > 1:
-            pred_smpl_params, pred_cam, log_prob, _, pred_pose_6d = self.flow(conditioning_feats, num_samples=num_samples-1)
+            log_prob, _, pred_pose_6d = self.flow(conditioning_feats, num_samples=num_samples-1)
             z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            pred_smpl_params_mode, pred_cam_mode, log_prob_mode, _,  pred_pose_6d_mode = self.flow(conditioning_feats, z=z_0)
-            pred_smpl_params = {k: torch.cat((pred_smpl_params_mode[k], v), dim=1) for k,v in pred_smpl_params.items()}
-            pred_cam = torch.cat((pred_cam_mode, pred_cam), dim=1)
+            log_prob_mode, _,  pred_pose_6d_mode = self.flow(conditioning_feats, z=z_0)
             log_prob = torch.cat((log_prob_mode, log_prob), dim=1)
             pred_pose_6d = torch.cat((pred_pose_6d_mode, pred_pose_6d), dim=1)
         else:
             z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            pred_smpl_params, pred_cam, log_prob, _,  pred_pose_6d = self.flow(conditioning_feats, z=z_0)
+            log_prob, _,  pred_pose_6d = self.flow(conditioning_feats, z=z_0)
 
     def compute_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
         """
@@ -193,9 +194,10 @@ class FFHFlow(pl.LightningModule):
         """
         return self.forward_step(batch, train=False)
 
-    def training_step(self, joint_batch: Dict, batch_idx: int, optimizer_idx: int) -> Dict:
+    def training_step(self, joint_batch: Dict, batch_idx: int) -> Dict:
         """
         Run a full training step
+        batch: 'rot_matrix','transl','joint_conf','bps_object','pcd_path','obj_name'
         Args:
             joint_batch (Dict): Dictionary containing image and mocap batch data
             batch_idx (int): Unused.
@@ -203,11 +205,10 @@ class FFHFlow(pl.LightningModule):
         Returns:
             Dict: Dictionary containing regression output.
         """
-        batch = joint_batch['img']
-        mocap_batch = joint_batch['mocap']
-        optimizer, optimizer_disc = self.optimizers(use_pl_optimizer=True)
-        batch_size = batch['img'].shape[0]
+        batch = joint_batch
+        optimizer = self.optimizers(use_pl_optimizer=True)
         output = self.forward_step(batch, train=True)
+
         pred_smpl_params = output['pred_smpl_params']
         num_samples = pred_smpl_params['body_pose'].shape[1]
         pred_smpl_params = output['pred_smpl_params']
@@ -231,7 +232,6 @@ class FFHFlow(pl.LightningModule):
         Returns:
             Dict: Dictionary containing regression output.
         """
-        batch_size = batch['img'].shape[0]
         output = self.forward_step(batch, train=False)
         pred_smpl_params = output['pred_smpl_params']
         num_samples = pred_smpl_params['body_pose'].shape[1]
