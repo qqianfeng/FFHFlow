@@ -5,7 +5,7 @@ from typing import Optional, Dict, Tuple
 from nflows.flows import ConditionalGlow
 from yacs.config import CfgNode
 
-# from prohmr.utils.geometry import rot6d_to_rotmat
+from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
 
 class RotFlow(nn.Module):
@@ -37,11 +37,11 @@ class RotFlow(nn.Module):
         # feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
 
-        samples = batch['rot_matrix'] #[64,3,3]
+        samples = batch['rot_matrix']  # [batch_size,3,3]
 
-        feats = feats.reshape(batch_size, 1, -1).repeat(1, 1, 1)
-
-        log_prob, z = self.flow.log_prob(samples.reshape(batch_size, -1).to(feats.dtype), feats.reshape(batch_size, -1))
+        samples = samples.reshape(batch_size, -1).to(feats.dtype)
+        feats = feats.reshape(batch_size, -1)
+        log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
         z = z.reshape(batch_size, 1, -1)
         return log_prob, z
@@ -62,7 +62,7 @@ class RotFlow(nn.Module):
             z (torch.Tensor): Either the input z or the randomly drawn batch of latent Gaussian vectors.
             pred_pose_6d (torch.Tensor): Predicted pose vectors in the 6-dimensional representation.
         """
-        feats = feats.float()
+        # feats = feats.float()
 
         batch_size = feats.shape[0]
 
@@ -77,10 +77,8 @@ class RotFlow(nn.Module):
             pred_params = samples.reshape(batch_size, num_samples, -1)
 
         # TODO: fix from here
-        pred_pose = pred_params[:, :, :self.npose]
+        pred_pose = pred_params[:, :, :6]
         pred_pose_6d = pred_pose.clone()
-        pred_pose = rot6d_to_rotmat(pred_pose.reshape(batch_size * num_samples, -1)).view(batch_size, num_samples, self.cfg.SMPL.NUM_BODY_JOINTS+1, 3, 3)
-        pred_smpl_params = {'global_orient': pred_pose[:, :, [0]],
-                             'body_pose': pred_pose[:, :, 1:]}
+        pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
         return log_prob, z, pred_pose_6d

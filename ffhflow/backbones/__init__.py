@@ -10,3 +10,4 @@
 #         raise NotImplementedError('Backbone type is not implemented')
 
 from .pointnet import PointNetfeat
+from .ffhgenerator import FFHGenerator

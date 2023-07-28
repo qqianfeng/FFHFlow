@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple
 
 from yacs.config import CfgNode
 
-from .backbones import PointNetfeat
+from .backbones import PointNetfeat, FFHGenerator
 from .heads import RotFlow
 from .utils import utils
 
@@ -46,9 +46,12 @@ class FFHFlow(pl.LightningModule):
         super().__init__()
 
         self.cfg = cfg
+
         # Create backbone feature extractor
-        # self.backbone = PointNetfeat(cfg)
-        self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        self.backbone = FFHGenerator(cfg)
+        for param in self.backbone.parameters():
+            param.requires_grad = False
 
         self.flow = RotFlow(cfg)
 
@@ -111,12 +114,11 @@ class FFHFlow(pl.LightningModule):
         else:
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
 
-
-        x = batch["pcd_arr"]
+        x = batch["bps_object"]
         batch_size = x.shape[0]
 
-        # Compute keypoint features using the backbone
-        conditioning_feats, _, _ = self.backbone(x)
+        # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
+        conditioning_feats= self.backbone(batch)
 
        # If ActNorm layers are not initialized, initialize them
        # TODO:
@@ -127,7 +129,7 @@ class FFHFlow(pl.LightningModule):
         if num_samples > 1:
             log_prob, _, pred_pose_6d = self.flow(conditioning_feats, num_samples=num_samples-1)
             z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            log_prob_mode, _,  pred_pose_6d_mode = self.flow(conditioning_feats, z=z_0)
+            log_prob_mode, _, pred_pose_6d_mode = self.flow(conditioning_feats, z=z_0)
             log_prob = torch.cat((log_prob_mode, log_prob), dim=1)
             pred_pose_6d = torch.cat((pred_pose_6d_mode, pred_pose_6d), dim=1)
         else:
@@ -179,7 +181,6 @@ class FFHFlow(pl.LightningModule):
             #    sum([loss_smpl_params_exp[k] * self.cfg.LOSS_WEIGHTS[(k+'_EXP').upper()] for k in loss_smpl_params_exp])+\
             #    sum([loss_smpl_params_mode[k] * self.cfg.LOSS_WEIGHTS[(k+'_MODE').upper()] for k in loss_smpl_params_mode])
 
-
     def forward(self, batch: Dict) -> Dict:
         """
         Run a forward step of the network in val mode
@@ -205,9 +206,9 @@ class FFHFlow(pl.LightningModule):
         optimizer = self.optimizers(use_pl_optimizer=True)
         output = self.forward_step(batch, train=True)
 
-        pred_smpl_params = output['pred_smpl_params']
-        num_samples = pred_smpl_params['body_pose'].shape[1]
-        pred_smpl_params = output['pred_smpl_params']
+        # pred_smpl_params = output['pred_smpl_params']
+        # num_samples = pred_smpl_params['body_pose'].shape[1]
+        # pred_smpl_params = output['pred_smpl_params']
         loss = self.compute_loss(batch, output, train=True)
 
         optimizer.zero_grad()
