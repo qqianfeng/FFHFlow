@@ -17,22 +17,20 @@ def kl_divergence(mu, logvar, device="cpu"):
     return torch.mean(-.5 * torch.sum(1. + logvar - mu**2 - torch.exp(logvar), dim=-1))
 
 
-def transl_rot_6D_l2_loss(pred_transl_rot_6D,
-                          gt_transl_rot_matrix,
-                          torch_l2_loss_fn,
-                          device='cpu'):
+def transl_rot_l2_loss(pred_transl_rot_6D,
+                        gt_transl_rot_matrix,
+                        torch_l2_loss_fn,
+                        device='cpu'):
     """ Takes in the 3D translation and 6D rotation prediction and computes l2 loss to ground truth 3D translation
     and 3x3 rotation matrix by translforming the 6D rotation to 3x3 rotation matrix.
     """
-    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_transl_rot_6D['rot_6D'],device=device)  #batch_size*3*3
-    pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #batch_size*9
+    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_transl_rot_6D, device=device)  # batch_size*3*3
+    pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
     gt_rot_matrix = gt_transl_rot_matrix['rot_matrix']
     # l2 loss on rotation matrix
     l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
-    # l2 loss on translation
-    l2_loss_transl = torch_l2_loss_fn(pred_transl_rot_6D['transl'], gt_transl_rot_matrix['transl'])
 
-    return l2_loss_transl, l2_loss_rot
+    return l2_loss_rot
 
 
 class FFHFlow(pl.LightningModule):
@@ -60,7 +58,7 @@ class FFHFlow(pl.LightningModule):
                                             betas=(cfg.TRAIN.BETA1, 0.999),
                                             weight_decay=cfg.TRAIN.WEIGHT_DECAY)
         self.kl_loss = kl_divergence
-        self.rec_pose_loss = transl_rot_6D_l2_loss
+        self.rec_pose_loss = transl_rot_l2_loss
         self.L2_loss = torch.nn.MSELoss(reduction='mean')
 
         self.initialized = False
@@ -110,7 +108,7 @@ class FFHFlow(pl.LightningModule):
             Dict: Dictionary containing the regression output
         """
         if train:
-            num_samples = self.cfg.TRAIN.NUM_TRAIN_SAMPLES
+            num_samples = self.cfg.TRAIN.NUM_TRAIN_SAMPLES  # ????
         else:
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
 
@@ -118,23 +116,30 @@ class FFHFlow(pl.LightningModule):
         batch_size = x.shape[0]
 
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
-        conditioning_feats= self.backbone(batch)
+        conditioning_feats = self.backbone(batch)
 
-       # If ActNorm layers are not initialized, initialize them
-       # TODO:
+        # If ActNorm layers are not initialized, initialize them
+        # TODO:
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
         # If validation draw num_samples - 1 random samples and the zero vector
         if num_samples > 1:
-            log_prob, _, pred_pose_6d = self.flow(conditioning_feats, num_samples=num_samples-1)
+            log_prob, _, pred_pose_rot = self.flow(conditioning_feats, num_samples=num_samples-1)
             z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            log_prob_mode, _, pred_pose_6d_mode = self.flow(conditioning_feats, z=z_0)
+            log_prob_mode, _, pred_pose_rot_mode = self.flow(conditioning_feats, z=z_0)
             log_prob = torch.cat((log_prob_mode, log_prob), dim=1)
-            pred_pose_6d = torch.cat((pred_pose_6d_mode, pred_pose_6d), dim=1)
+            pred_pose_rot = torch.cat((pred_pose_rot_mode, pred_pose_rot), dim=1)
         else:
             z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            log_prob, _,  pred_pose_6d = self.flow(conditioning_feats, z=z_0)
+            log_prob, _,  pred_pose_rot = self.flow(conditioning_feats, z=z_0)
+
+        output = {}
+        output['log_prod'] = log_prob
+        output['pred_pose_rot'] = pred_pose_rot
+        output['conditioning_feats'] = conditioning_feats
+
+        return output
 
     def compute_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
         """
@@ -147,18 +152,15 @@ class FFHFlow(pl.LightningModule):
             torch.Tensor : Total loss for current batch
         """
 
-        # KL loss
-        kl_loss_val = self.kl_loss(output["mu"], output["logvar"])
-
-        # reconstruction loss
+        # 1. Reconstruction loss
         gt_transl_rot_matrix = {
-            # 'transl': self.FFHGenerator.transl,
+            'transl': self.FFHGenerator.transl,
             'rot_matrix': self.FFHGenerator.rot_matrix
         }
-        transl_loss_val, rot_loss_val = self.rec_pose_loss(output, gt_transl_rot_matrix,
+        transl_loss_val, rot_loss_val = self.rec_pose_loss(output['pred_pose_rot'], gt_transl_rot_matrix,
                                                         self.L2_loss, self.device)
 
-        # TODO: Compute NLL loss
+        # 2. Compute NLL loss
         # Add some noise to annotations at training time to prevent overfitting
         if train:
             smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}

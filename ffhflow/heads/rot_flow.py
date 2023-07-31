@@ -25,7 +25,7 @@ class RotFlow(nn.Module):
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
-        Compute the log-probability of a set of smpl_params given a batch of images.
+        Compute the log-probability of a set of samples given a batch of images.
         Args:
             smpl_params (Dict): Dictionary containing a set of SMPL parameters.
             feats (torch.Tensor): Conditioning features of shape (N, C).
