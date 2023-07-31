@@ -104,6 +104,7 @@ class PointNetfeat(nn.Module):
             self.fstn = STNkd(k=64)
 
     def forward(self, x):
+        x = x['pcd_arr']
         n_pts = x.size()[2]
         trans = self.stn(x)
         x = x.transpose(2, 1)
@@ -125,7 +126,7 @@ class PointNetfeat(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
         if self.global_feat:
-            return x, trans, trans_feat
+            return x #, trans, trans_feat
         else:
             x = x.view(-1, 1024, 1).repeat(1, 1, n_pts)
             return torch.cat([x, pointfeat], 1), trans, trans_feat

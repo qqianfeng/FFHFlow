@@ -167,7 +167,7 @@ class FFHGeneratorDataset(data.Dataset):
 
 class FFHGeneratorPCDDataSet(FFHGeneratorDataset):
     def __init__(self, cfg, eval=False, dtype=torch.float64):
-        super().__init__()
+        super().__init__(cfg)
 
         self.objs_names = self.get_objs_names(self.ds_path)
         self.objs_folder = os.path.join(self.ds_path, 'pcd')
