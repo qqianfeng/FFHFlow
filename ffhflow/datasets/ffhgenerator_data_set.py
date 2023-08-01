@@ -154,7 +154,7 @@ class FFHGeneratorDataset(data.Dataset):
                     'bps_object': bps_obj}
 
         # If we want to evaluate, also return the pcd path to load from for vis
-        #if self.cfg["ds_name"] == 'eval':
+        # if self.cfg["ds_name"] == 'eval':
         data_out['pcd_path'] = bps_path.replace('bps', 'pcd').replace('npy', 'pcd')
         data_out['obj_name'] = obj_name
 

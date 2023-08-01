@@ -127,3 +127,65 @@ class FFHGenerator(nn.Module):
         feat = torch.cat([mu, logvar],dim=1)
         feat = self.fc_flow_feat(feat)
         return feat
+
+
+class BPSMLP(nn.Module):
+    def __init__(self,
+                 cfg,
+                 n_neurons=512,
+                 in_bps=4096,
+                 feat_dim=9,
+                 dtype=torch.float32,
+                 **kwargs):
+        super().__init__()
+        self.cfg = cfg
+
+        self.bn1 = nn.BatchNorm1d(in_bps)
+        self.rb1 = ResBlock(in_bps, n_neurons)
+        self.rb2 = ResBlock(in_bps + n_neurons, n_neurons)
+        self.rb3 = ResBlock(in_bps + n_neurons, n_neurons)
+        self.dout = nn.Dropout(0.3)
+        self.sigmoid = nn.Sigmoid()
+
+        self.fc = nn.Linear(n_neurons, feat_dim)
+
+        if self.cfg["is_train"]:
+            print("FFHEvaluator currently in TRAIN mode!")
+            self.train()
+        else:
+            print("FFHEvaluator currently in EVAL mode!")
+            self.eval()
+        self.dtype = torch.float32
+        self.device = torch.device('cuda:{}'.format(
+            cfg["gpu_ids"][0])) if torch.cuda.is_available() else torch.device('cpu')
+
+    def set_input(self, data):
+        self.rot_matrix = data["rot_matrix"].to(dtype=self.dtype, device=self.device)
+        self.transl = data["transl"].to(dtype=self.dtype, device=self.device)
+        self.bps_object = data["bps_object"].to(dtype=self.dtype, device=self.device).contiguous()
+        if 'label' in data.keys():
+            self.gt_label = data["label"].to(dtype=self.dtype, device=self.device).unsqueeze(-1)
+        self.rot_matrix = self.rot_matrix.view(self.bps_object.shape[0], -1)
+
+    def forward(self, data):
+        """Run one forward iteration to evaluate the success probability of given grasps
+
+        Args:
+            data (dict): keys should be rot_matrix, transl, joint_conf, bps_object,
+
+        Returns:
+            p_success (tensor, batch_size*1): Probability that a grasp will be successful.
+        """
+        self.set_input(data)
+        X = torch.cat([self.bps_object], dim=1)
+
+        X0 = self.bn1(X)
+        X = self.rb1(X0)
+        X = self.dout(X)
+        X = self.rb2(torch.cat([X, X0], dim=1))
+        X = self.dout(X)
+        X = self.rb3(torch.cat([X, X0], dim=1))
+        X = self.dout(X)
+        X = self.fc(X)
+
+        return X

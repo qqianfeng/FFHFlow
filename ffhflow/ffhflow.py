@@ -5,7 +5,7 @@ from typing import Any, Dict, Tuple
 
 from yacs.config import CfgNode
 
-from .backbones import PointNetfeat, FFHGenerator
+from .backbones import PointNetfeat, FFHGenerator, BPSMLP
 from .heads import RotFlow
 from .utils import utils
 
@@ -35,7 +35,7 @@ def transl_rot_l2_loss(pred_transl_rot_6D,
     """
     pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_transl_rot_6D, device=device)  # batch_size*3*3
     pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
-    gt_rot_matrix = gt_transl_rot_matrix
+    gt_rot_matrix = gt_transl_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
     # l2 loss on rotation matrix
     l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
 
@@ -166,17 +166,17 @@ class FFHFlow(pl.LightningModule):
         pred_pose_rot = output['pred_pose_rot'].view(-1,6)
         rot_matrix = batch['rot_matrix']
 
-        transl_loss_val, rot_loss_val = self.transl_rot_l2_loss(pred_pose_rot, rot_matrix,
+        rot_loss_val = self.transl_rot_l2_loss(pred_pose_rot, rot_matrix,
                                                         self.L2_loss, self.device)
 
         # 2. Compute NLL loss
-        # Add some noise to annotations at training time to prevent overfitting
-        if train:
-            smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
-        if smpl_params['body_pose'].shape[0] > 0:
-            log_prob, _ = self.flow.log_prob(smpl_params, conditioning_feats[has_smpl_params])
-        else:
-            log_prob = torch.zeros(1, device=device, dtype=dtype)
+        conditioning_feats = output['conditioning_feats']
+
+        # # Add some noise to annotations at training time to prevent overfitting
+        # if train:
+        #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
+
+        log_prob, _ = self.flow.log_prob(smpl_params, conditioning_feats)
         loss_nll = -log_prob.mean()
 
         # TODO: Compute orthonormal loss on 6D representations
