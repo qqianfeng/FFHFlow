@@ -62,11 +62,12 @@ class FFHFlow(pl.LightningModule):
         self.cfg = cfg
 
         # Create backbone feature extractor
-        self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        # self.backbone = BPSMLP()
+        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        self.backbone = BPSMLP()
 
-        for param in self.backbone.parameters():
-            param.requires_grad = False
+        # # free param in backbone
+        # for param in self.backbone.parameters():
+        #     param.requires_grad = False
 
         self.flow = RotFlow(cfg)
 
@@ -177,6 +178,7 @@ class FFHFlow(pl.LightningModule):
         pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
         loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
         loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+
         # combine all the losses
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
                self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
