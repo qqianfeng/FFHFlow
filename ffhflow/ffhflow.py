@@ -17,25 +17,32 @@ def kl_divergence(mu, logvar, device="cpu"):
     return torch.mean(-.5 * torch.sum(1. + logvar - mu**2 - torch.exp(logvar), dim=-1))
 
 
-def transl_rot_l2_loss(pred_transl_rot_6D,
-                        gt_transl_rot_matrix,
-                        torch_l2_loss_fn,
-                        device='cpu'):
+def transl_l2_loss(pred_transl,
+                   gt_transl,
+                   torch_l2_loss_fn,
+                   device='cpu'):
+    return torch_l2_loss_fn(pred_transl, gt_transl)
+
+
+def rot_6D_l2_loss(pred_rot_6D,
+                    gt_rot_matrix,
+                    torch_l2_loss_fn,
+                    device='cpu'):
     """Takes in the 3D translation and 6D rotation prediction and computes l2 loss to ground truth 3D translation
     and 3x3 rotation matrix by translforming the 6D rotation to 3x3 rotation matrix.
 
     Args:
         pred_transl_rot_6D (_type_): rotation representation of 6 D
-        gt_transl_rot_matrix (_type_): roration matrix [3,3]
+        gt_transl_rot_matrix (_type_): roration matrix [3,3] + translation
         torch_l2_loss_fn (_type_): _description_
         device (str, optional): _description_. Defaults to 'cpu'.
 
     Returns:
         _type_: _description_
     """
-    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_transl_rot_6D, device=device)  # batch_size*3*3
+    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_rot_6D, device=device)  # batch_size*3*3
     pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
-    gt_rot_matrix = gt_transl_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
+    gt_rot_matrix = gt_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
     # l2 loss on rotation matrix
     l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
 
@@ -56,7 +63,7 @@ class FFHFlow(pl.LightningModule):
 
         # Create backbone feature extractor
         self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        # self.backbone = FFHGenerator(cfg)
+        # self.backbone = BPSMLP()
 
         for param in self.backbone.parameters():
             param.requires_grad = False
@@ -68,10 +75,13 @@ class FFHFlow(pl.LightningModule):
                                             betas=(cfg.TRAIN.BETA1, 0.999),
                                             weight_decay=cfg.TRAIN.WEIGHT_DECAY)
         self.kl_loss = kl_divergence
-        self.transl_rot_l2_loss = transl_rot_l2_loss
+        self.rot_6D_l2_loss = rot_6D_l2_loss
+        self.transl_l2_loss = transl_l2_loss
+
         self.L2_loss = torch.nn.MSELoss(reduction='mean')
 
         self.initialized = False
+        self.automatic_optimization = False
 
     def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
         """
@@ -96,14 +106,6 @@ class FFHFlow(pl.LightningModule):
         # Get ground truth SMPL params, convert them to 6D and pass them to the flow module together with the conditioning feats.
         # Necessary to initialize ActNorm layers.
 
-        # TODO:
-        # smpl_params = {k: v.clone() for k,v in batch['smpl_params'].items()}
-        # batch_size = smpl_params['body_pose'].shape[0]
-        # has_smpl_params = batch['has_smpl_params']['body_pose'] > 0
-        # smpl_params['body_pose'] = aa_to_rotmat(smpl_params['body_pose'].reshape(-1, 3)).reshape(batch_size, -1, 3, 3)[:, :, :, :2].permute(0, 1, 3, 2).reshape(batch_size, 1, -1)[has_smpl_params]
-        # smpl_params['global_orient'] = aa_to_rotmat(smpl_params['global_orient'].reshape(-1, 3)).reshape(batch_size, -1, 3, 3)[:, :, :, :2].permute(0, 1, 3, 2).reshape(batch_size, 1, -1)[has_smpl_params]
-        # smpl_params['betas'] = smpl_params['betas'].unsqueeze(1)[has_smpl_params]
-        # conditioning_feats = conditioning_feats[has_smpl_params]
         with torch.no_grad():
             _, _ = self.flow.log_prob(batch, conditioning_feats)
             self.initialized = True
@@ -118,35 +120,23 @@ class FFHFlow(pl.LightningModule):
             Dict: Dictionary containing the regression output
         """
         if train:
-            num_samples = self.cfg.TRAIN.NUM_TRAIN_SAMPLES  # ????
+            num_samples = self.cfg.TRAIN.NUM_TRAIN_SAMPLES
         else:
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
-
-        x = batch["rot_matrix"]
-        batch_size = x.shape[0]
 
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
         conditioning_feats = self.backbone(batch)
 
         # If ActNorm layers are not initialized, initialize them
-        # TODO:
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
-        # If validation draw num_samples - 1 random samples and the zero vector
-        if num_samples > 1:
-            log_prob, _, pred_pose_rot = self.flow(conditioning_feats, num_samples=num_samples-1)
-            z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            log_prob_mode, _, pred_pose_rot_mode = self.flow(conditioning_feats, z=z_0)
-            log_prob = torch.cat((log_prob_mode, log_prob), dim=1)
-            pred_pose_rot = torch.cat((pred_pose_rot_mode, pred_pose_rot), dim=1)
-        else:
-            z_0 = torch.zeros(batch_size, 1, self.cfg.MODEL.FLOW.DIM, device=x.device)
-            log_prob, _,  pred_pose_rot = self.flow(conditioning_feats, z=z_0)
+        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
 
         output = {}
         output['log_prod'] = log_prob
         output['pred_pose_rot'] = pred_pose_rot
+        output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
 
         return output
@@ -163,11 +153,15 @@ class FFHFlow(pl.LightningModule):
         """
 
         # 1. Reconstruction loss
-        pred_pose_rot = output['pred_pose_rot'].view(-1,6)
-        rot_matrix = batch['rot_matrix']
+        num_samples = output['pred_pose_rot'].shape[1]
+        pred_pose_6d = output['pred_pose_rot'].view(-1,6)
+        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        batch_size = output['pred_pose_rot'].shape[0]
+        gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+        gt_transl = batch['transl']
 
-        rot_loss_val = self.transl_rot_l2_loss(pred_pose_rot, rot_matrix,
-                                                        self.L2_loss, self.device)
+        rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
@@ -176,21 +170,29 @@ class FFHFlow(pl.LightningModule):
         # if train:
         #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
 
-        log_prob, _ = self.flow.log_prob(smpl_params, conditioning_feats)
+        log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
-        # TODO: Compute orthonormal loss on 6D representations
+        # 3: Compute orthonormal loss on 6D representations
         pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
         loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
-        loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1)
-        loss_pose_6d_mode = loss_pose_6d[:, 0].mean()
-        loss_pose_6d_exp = loss_pose_6d[:, 1:].mean()
-
+        loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll+\
-               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * (loss_pose_6d_exp+loss_pose_6d_mode)
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
+               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
             #    sum([loss_smpl_params_exp[k] * self.cfg.LOSS_WEIGHTS[(k+'_EXP').upper()] for k in loss_smpl_params_exp])+\
             #    sum([loss_smpl_params_mode[k] * self.cfg.LOSS_WEIGHTS[(k+'_MODE').upper()] for k in loss_smpl_params_mode])
+        losses = dict(loss=loss.detach(),
+                    loss_nll=loss_nll.detach(),
+                    loss_pose_6d=loss_pose_6d.detach(),
+                    rot_loss=rot_loss.detach(),
+                    transl_loss=transl_loss.detach())
+
+        output['losses'] = losses
+
+        return loss
 
     def forward(self, batch: Dict) -> Dict:
         """
@@ -217,9 +219,6 @@ class FFHFlow(pl.LightningModule):
         optimizer = self.optimizers(use_pl_optimizer=True)
         output = self.forward_step(batch, train=True)
 
-        # pred_smpl_params = output['pred_smpl_params']
-        # num_samples = pred_smpl_params['body_pose'].shape[1]
-        # pred_smpl_params = output['pred_smpl_params']
         loss = self.compute_loss(batch, output, train=True)
 
         optimizer.zero_grad()
@@ -241,10 +240,26 @@ class FFHFlow(pl.LightningModule):
             Dict: Dictionary containing regression output.
         """
         output = self.forward_step(batch, train=False)
-        pred_smpl_params = output['pred_smpl_params']
-        num_samples = pred_smpl_params['body_pose'].shape[1]
         loss = self.compute_loss(batch, output, train=False)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
         return output
+
+    def tensorboard_logging(self, batch: Dict, output: Dict, step_count: int, train: bool = True) -> None:
+        """
+        Log results to Tensorboard
+        Args:
+            batch (Dict): Dictionary containing batch data
+            output (Dict): Dictionary containing the regression output
+            step_count (int): Global training step count
+            train (bool): Flag indicating whether it is training or validation mode
+        """
+
+        mode = 'train' if train else 'val'
+        summary_writer = self.logger.experiment
+
+        losses = output['losses']
+
+        for loss_name, val in losses.items():
+            summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)

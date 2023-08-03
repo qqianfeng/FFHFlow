@@ -18,7 +18,6 @@ class RotFlow(nn.Module):
         """
         super(RotFlow, self).__init__()
         self.cfg = cfg
-        # TODO: context_feature???
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
@@ -66,19 +65,17 @@ class RotFlow(nn.Module):
 
         batch_size = feats.shape[0]
 
-        if z is None:
-            # Generates samples from the distribution together with their log probability.
-            samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
-            z = z.reshape(batch_size, num_samples, -1)
-            pred_params = samples.reshape(batch_size, num_samples, -1)
-        else:
-            num_samples = z.shape[1]
-            samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats, noise=z)
-            pred_params = samples.reshape(batch_size, num_samples, -1)
+        # we always sample z from prior
+        assert z is None
 
-        # TODO: fix from here
+        # Generates samples from the distribution together with their log probability.
+        samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+        z = z.reshape(batch_size, num_samples, -1)
+        pred_params = samples.reshape(batch_size, num_samples, -1)
+
         pred_pose = pred_params[:, :, :6]
         pred_pose_6d = pred_pose.clone()
         pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
-        return log_prob, z, pred_pose_6d
+        pred_pose_transl = pred_params[:, :, 6:]
+        return log_prob, z, pred_pose_6d, pred_pose_transl

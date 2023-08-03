@@ -131,14 +131,12 @@ class FFHGenerator(nn.Module):
 
 class BPSMLP(nn.Module):
     def __init__(self,
-                 cfg,
                  n_neurons=512,
                  in_bps=4096,
                  feat_dim=9,
                  dtype=torch.float32,
                  **kwargs):
         super().__init__()
-        self.cfg = cfg
 
         self.bn1 = nn.BatchNorm1d(in_bps)
         self.rb1 = ResBlock(in_bps, n_neurons)
@@ -149,22 +147,17 @@ class BPSMLP(nn.Module):
 
         self.fc = nn.Linear(n_neurons, feat_dim)
 
-        if self.cfg["is_train"]:
-            print("FFHEvaluator currently in TRAIN mode!")
-            self.train()
-        else:
-            print("FFHEvaluator currently in EVAL mode!")
-            self.eval()
         self.dtype = torch.float32
-        self.device = torch.device('cuda:{}'.format(
-            cfg["gpu_ids"][0])) if torch.cuda.is_available() else torch.device('cpu')
 
     def set_input(self, data):
-        self.rot_matrix = data["rot_matrix"].to(dtype=self.dtype, device=self.device)
-        self.transl = data["transl"].to(dtype=self.dtype, device=self.device)
-        self.bps_object = data["bps_object"].to(dtype=self.dtype, device=self.device).contiguous()
-        if 'label' in data.keys():
-            self.gt_label = data["label"].to(dtype=self.dtype, device=self.device).unsqueeze(-1)
+        """ Bring input tensors to correct dtype and device. Set whether gradient is required depending on
+        we are in train or eval mode.
+        """
+        self.rot_matrix = data["rot_matrix"].to(dtype=self.dtype)
+        self.transl = data["transl"].to(dtype=self.dtype)
+        self.joint_conf = data["joint_conf"].to(dtype=self.dtype)
+        self.bps_object = data["bps_object"].to(dtype=self.dtype).contiguous()
+
         self.rot_matrix = self.rot_matrix.view(self.bps_object.shape[0], -1)
 
     def forward(self, data):
