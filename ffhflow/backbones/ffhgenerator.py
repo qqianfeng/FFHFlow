@@ -134,7 +134,7 @@ class BPSMLP(nn.Module):
                  n_neurons=512,
                  in_bps=4096,
                  feat_dim=9,
-                 dtype=torch.float32,
+                 dtype=torch.float64,
                  **kwargs):
         super().__init__()
 
@@ -147,7 +147,7 @@ class BPSMLP(nn.Module):
 
         self.fc = nn.Linear(n_neurons, feat_dim)
 
-        self.dtype = torch.float32
+        self.dtype = dtype
 
     def set_input(self, data):
         """ Bring input tensors to correct dtype and device. Set whether gradient is required depending on
