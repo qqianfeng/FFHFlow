@@ -100,8 +100,6 @@ class PointNetfeat(nn.Module):
         self.bn3 = nn.BatchNorm1d(1024)
         self.global_feat = global_feat
         self.feature_transform = feature_transform
-        # output feature dim according to NF.
-        self.fc4nf = nn.Linear(1024, 9)
 
         if self.feature_transform:
             self.fstn = STNkd(k=64)
@@ -128,7 +126,6 @@ class PointNetfeat(nn.Module):
         x = self.bn3(self.conv3(x))
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
-        self.fc4nf(x)
         if self.global_feat:
             return x #, trans, trans_feat
         else:

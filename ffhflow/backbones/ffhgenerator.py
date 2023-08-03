@@ -133,7 +133,6 @@ class BPSMLP(nn.Module):
     def __init__(self,
                  n_neurons=512,
                  in_bps=4096,
-                 feat_dim=9,
                  dtype=torch.float64,
                  **kwargs):
         super().__init__()
@@ -144,8 +143,6 @@ class BPSMLP(nn.Module):
         self.rb3 = ResBlock(in_bps + n_neurons, n_neurons)
         self.dout = nn.Dropout(0.3)
         self.sigmoid = nn.Sigmoid()
-
-        self.fc = nn.Linear(n_neurons, feat_dim)
 
         self.dtype = dtype
 
@@ -178,7 +175,5 @@ class BPSMLP(nn.Module):
         X = self.rb2(torch.cat([X, X0], dim=1))
         X = self.dout(X)
         X = self.rb3(torch.cat([X, X0], dim=1))
-        X = self.dout(X)
-        X = self.fc(X)
 
         return X
