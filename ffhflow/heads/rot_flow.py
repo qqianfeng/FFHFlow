@@ -8,7 +8,7 @@ from yacs.config import CfgNode
 from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
 
-class RotFlow(nn.Module):
+class GraspFlow(nn.Module):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -16,7 +16,7 @@ class RotFlow(nn.Module):
         Args:
             cfg (CfgNode): Model config as yacs CfgNode.
         """
-        super(RotFlow, self).__init__()
+        super(GraspFlow, self).__init__()
         self.cfg = cfg
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,

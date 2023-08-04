@@ -1,1 +1,1 @@
-from .rot_flow import RotFlow
+from .rot_flow import GraspFlow

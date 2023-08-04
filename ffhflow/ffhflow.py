@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 from yacs.config import CfgNode
 
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
-from .heads import RotFlow
+from .heads import GraspFlow
 from .utils import utils
 
 
@@ -69,7 +69,7 @@ class FFHFlow(pl.LightningModule):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = RotFlow(cfg)
+        self.flow = GraspFlow(cfg)
 
         self.optimizer = torch.optim.Adam(self.backbone.parameters(),
                                             lr=cfg.TRAIN.LR,
@@ -163,6 +163,7 @@ class FFHFlow(pl.LightningModule):
 
         rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        # TODO: add joint as loss
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
