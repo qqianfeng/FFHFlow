@@ -18,7 +18,7 @@ args = parser.parse_args()
 cfg = get_config(args.model_cfg)
 
 # copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'tensorboard','hparams.yaml')
+fname = os.path.join(args.root_dir, 'hparams.yaml')
 if not os.path.isfile(fname):
     shutil.copy(args.model_cfg, fname)
 
