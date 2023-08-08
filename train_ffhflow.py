@@ -1,5 +1,6 @@
 import os
 import argparse
+import shutil
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
@@ -11,11 +12,15 @@ parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting tra
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='/home/yb/workspace/ffhflow/checkpoints', help='Directory to save logs and checkpoints')
 
-
 args = parser.parse_args()
 
 # Set up cfg
 cfg = get_config(args.model_cfg)
+
+# copy the config file to save_dir
+fname = os.path.join(args.root_dir, 'tensorboard','hparams.yaml')
+if not os.path.isfile(fname):
+    shutil.copy(args.model_cfg, fname)
 
 # Setup Tensorboard logger
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
