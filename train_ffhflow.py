@@ -8,6 +8,8 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow import FFHFlow
+from ffhflow.ffhflow_normal import FFHFlowNormal
+
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='/home/yb/workspace/ffhflow/checkpoints', help='Directory to save logs and checkpoints')
@@ -26,7 +28,8 @@ if not os.path.isfile(fname):
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
 
 # Set up model
-model = FFHFlow(cfg)
+# model = FFHFlow(cfg)
+model = FFHFlowNormal(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
