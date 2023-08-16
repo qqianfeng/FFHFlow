@@ -2,28 +2,6 @@ DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
   GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
-  TRAIN:
-    H36M-TRAIN:
-      WEIGHT: 0.3
-    MPII-TRAIN:
-      WEIGHT: 0.1
-    COCO-TRAIN-2014:
-      WEIGHT: 0.4
-    MPI-INF-TRAIN:
-      WEIGHT: 0.2
-  VAL:
-    H36M-VAL-P2:
-      WEIGHT: 0.5
-    COCO-VAL:
-      WEIGHT: 0.5
-  MOCAP: CMU-MOCAP
-
-SMPL:
-  MODEL_PATH: data
-  GENDER: neutral
-  NUM_BODY_JOINTS: 23
-  JOINT_REGRESSOR_EXTRA: data/SMPL_to_J19.pkl
-  MEAN_PARAMS: data/smpl_mean_params.npz
 
 GENERAL:
   TOTAL_STEPS: 500000
