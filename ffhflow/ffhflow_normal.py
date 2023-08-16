@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 from yacs.config import CfgNode
 
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
-from .heads import GraspFlow
+from .heads import GraspFlowNormal
 from .utils import utils
 
 
@@ -49,7 +49,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlow(pl.LightningModule):
+class FFHFlowNormal(pl.LightningModule):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -62,15 +62,19 @@ class FFHFlow(pl.LightningModule):
         self.cfg = cfg
 
         # Create backbone feature extractor
-        self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        # self.backbone = BPSMLP()
+        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        self.backbone = BPSMLP()
 
         # # free param in backbone
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlow(cfg)
+        self.flow = GraspFlowNormal(cfg)
 
+        self.optimizer = torch.optim.Adam(self.backbone.parameters(),
+                                            lr=cfg.TRAIN.LR,
+                                            betas=(cfg.TRAIN.BETA1, 0.999),
+                                            weight_decay=cfg.TRAIN.WEIGHT_DECAY)
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
         self.transl_l2_loss = transl_l2_loss
@@ -128,12 +132,12 @@ class FFHFlow(pl.LightningModule):
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
-        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
+        log_prob, _ = self.flow(batch, conditioning_feats)
 
         output = {}
         output['log_prod'] = log_prob
-        output['pred_pose_rot'] = pred_pose_rot
-        output['pred_pose_transl'] = pred_pose_transl
+        # output['pred_pose_rot'] = pred_pose_rot
+        # output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
 
         return output
@@ -150,16 +154,70 @@ class FFHFlow(pl.LightningModule):
         """
 
         # 1. Reconstruction loss
-        num_samples = output['pred_pose_rot'].shape[1]
-        pred_pose_6d = output['pred_pose_rot'].view(-1,6)
-        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        batch_size = output['pred_pose_rot'].shape[0]
-        gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
-        gt_transl = batch['transl']
+        # num_samples = output['pred_pose_rot'].shape[1]
+        # pred_pose_6d = output['pred_pose_rot'].view(-1,6)
+        # pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        # batch_size = output['pred_pose_rot'].shape[0]
+        # gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+        # gt_transl = batch['transl']
 
-        rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
-        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
-        # TODO: add joint as loss
+        # rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
+        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        # # TODO: add joint as loss
+
+        # 2. Compute NLL loss
+        conditioning_feats = output['conditioning_feats']
+        log_prob = output['log_prod']
+
+        # # Add some noise to annotations at training time to prevent overfitting
+        # if train:
+        #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
+
+        loss_nll = -log_prob.mean()
+
+        # 3: Compute orthonormal loss on 6D representations
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+
+        # combine all the losses
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+
+        losses = dict(loss=loss.detach(),
+                    loss_nll=loss_nll.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
+                    # rot_loss=rot_loss.detach(),
+                    # transl_loss=transl_loss.detach())
+
+        output['losses'] = losses
+
+        return loss
+
+    def compute_val_loss(self, batch: Dict, output: Dict) -> torch.Tensor:
+        """
+        Compute losses given the input batch and the regression output
+        Args:
+            batch (Dict): Dictionary containing batch data
+            output (Dict): Dictionary containing the regression output
+            train (bool): Flag indicating whether it is training or validation mode
+        Returns:
+            torch.Tensor : Total loss for current batch
+        """
+
+        # 1. Reconstruction loss
+        # num_samples = output['pred_pose_rot'].shape[1]
+        # pred_pose_6d = output['pred_pose_rot'].view(-1,6)
+        # pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        # batch_size = output['pred_pose_rot'].shape[0]
+        # gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+        # gt_transl = batch['transl']
+
+        # rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
+        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        # # TODO: add joint as loss
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
@@ -172,22 +230,21 @@ class FFHFlow(pl.LightningModule):
         loss_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
-        pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
-        loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
-        loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
-               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
-            #    sum([loss_smpl_params_exp[k] * self.cfg.LOSS_WEIGHTS[(k+'_EXP').upper()] for k in loss_smpl_params_exp])+\
-            #    sum([loss_smpl_params_mode[k] * self.cfg.LOSS_WEIGHTS[(k+'_MODE').upper()] for k in loss_smpl_params_mode])
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+
         losses = dict(loss=loss.detach(),
-                    loss_nll=loss_nll.detach(),
-                    loss_pose_6d=loss_pose_6d.detach(),
-                    rot_loss=rot_loss.detach(),
-                    transl_loss=transl_loss.detach())
+                    loss_nll=loss_nll.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
+                    # rot_loss=rot_loss.detach(),
+                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 
