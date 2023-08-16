@@ -12,7 +12,7 @@ from ffhflow.ffhflow_normal import FFHFlowNormal
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
-parser.add_argument('--root_dir', type=str, default='/home/yb/workspace/ffhflow/checkpoints', help='Directory to save logs and checkpoints')
+parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
