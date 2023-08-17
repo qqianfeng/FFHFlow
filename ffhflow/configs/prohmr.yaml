@@ -4,7 +4,7 @@ DATASETS:
   GRASP_DATA_NANE: grasp_data_all.h5
 
 GENERAL:
-  TOTAL_STEPS: 100000
+  TOTAL_STEPS: 200000 #100000 for train with nll and second 100000 for fintune
   LOG_STEPS: 100
   VAL_STEPS: 100
   CHECKPOINT_STEPS: 1000
