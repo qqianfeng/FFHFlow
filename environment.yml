@@ -63,7 +63,6 @@ dependencies:
   - pickleshare=0.7.5=pyhd3eb1b0_1003
   - pip=21.0.1=py37h06a4308_0
   - pixman=0.40.0=h7b6447c_0
-  - prompt-toolkit=3.0.39=pyha770c72_0
   - ptyprocess=0.7.0=pyhd3eb1b0_2
   - py-opencv=3.4.2=py37hb342d67_1
   - pygments=2.8.1=pyhd3eb1b0_0

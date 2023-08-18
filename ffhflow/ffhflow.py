@@ -62,8 +62,8 @@ class FFHFlow(pl.LightningModule):
         self.cfg = cfg
 
         # Create backbone feature extractor
-        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        self.backbone = BPSMLP()
+        self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        # self.backbone = BPSMLP()
 
         # # free param in backbone
         # for param in self.backbone.parameters():
@@ -71,10 +71,6 @@ class FFHFlow(pl.LightningModule):
 
         self.flow = GraspFlow(cfg)
 
-        self.optimizer = torch.optim.Adam(self.backbone.parameters(),
-                                            lr=cfg.TRAIN.LR,
-                                            betas=(cfg.TRAIN.BETA1, 0.999),
-                                            weight_decay=cfg.TRAIN.WEIGHT_DECAY)
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
         self.transl_l2_loss = transl_l2_loss

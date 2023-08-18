@@ -71,6 +71,8 @@ class GraspFlowNormal(nn.Module):
         assert z is None
 
         # Generates samples from the distribution together with their log probability.
+        # samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+
         if train is False:
             samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
             z = z.reshape(batch_size, num_samples, -1)

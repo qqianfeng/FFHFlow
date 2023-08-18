@@ -12,7 +12,7 @@ from ffhflow.ffhflow_normal import FFHFlowNormal
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
-parser.add_argument('--root_dir', type=str, default='/home/yb/workspace/ffhflow/checkpoints', help='Directory to save logs and checkpoints')
+parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -34,12 +34,14 @@ model = FFHFlowNormal(cfg)
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
                         os.path.join(args.root_dir, 'tensorboard'),
-                        every_n_train_steps=cfg.GENERAL.CHECKPOINT_STEPS)
+                        every_n_epochs=1)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
+ckpt_path = '/home/qf/workspace/ffhflow/checkpoints/tensorboard/epoch=7-step=97261.ckpt'
+
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
                      gpus=1,
@@ -52,7 +54,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      precision=16,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
-                     callbacks=[checkpoint_callback])
+                     callbacks=[checkpoint_callback],
+                     resume_from_checkpoint=ckpt_path)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
