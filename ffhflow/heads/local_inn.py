@@ -8,20 +8,20 @@ from yacs.config import CfgNode
 from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
 
-class GraspFlowNormal(nn.Module):
+class LocalInnFlow(nn.Module):
     """
-    Normalizing flow in a "normal" way that only forward direction is computed for loss so 'grasp' -> 'z'.
     """
     def __init__(self, cfg: CfgNode):
         """
         Args:
             cfg (CfgNode): Model config as yacs CfgNode.
         """
-        super().__init__()
+        super(LocalInnFlow, self).__init__()
         self.cfg = cfg
+        # No conditional inputs for local_inn
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
-                                    context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
+                                    context_features=None)
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
@@ -37,18 +37,16 @@ class GraspFlowNormal(nn.Module):
         # feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
 
-        rot = batch['rot_matrix']  # [batch_size,3,3]
-        rot = rot.reshape(batch_size, -1).to(feats.dtype)
-        transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
-        samples = torch.cat([rot, transl],dim=1)  # [batch_size,3,3]
+        samples = batch['rot_matrix']  # [batch_size,3,3]
 
+        samples = samples.reshape(batch_size, -1).to(feats.dtype)
         feats = feats.reshape(batch_size, -1)
         log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
         z = z.reshape(batch_size, 1, -1)
         return log_prob, z
 
-    def forward(self, batch, feats: torch.Tensor, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None, train=True) -> Tuple:
+    def forward(self, feats: torch.Tensor, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None) -> Tuple:
         """
         Run a forward pass of the model.
         If z is not specified, then the model randomly draws num_samples samples for each image in the batch.
@@ -72,25 +70,13 @@ class GraspFlowNormal(nn.Module):
         assert z is None
 
         # Generates samples from the distribution together with their log probability.
-        # samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+        samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+        z = z.reshape(batch_size, num_samples, -1)
+        pred_params = samples.reshape(batch_size, num_samples, -1)
 
-        if train is False:
-            samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
-            z = z.reshape(batch_size, num_samples, -1)
-            pred_params = samples.reshape(batch_size, num_samples, -1)
+        pred_pose = pred_params[:, :, :6]
+        pred_pose_6d = pred_pose.clone()
+        pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
-            pred_pose = pred_params[:, :, :6]
-            pred_pose_6d = pred_pose.clone()
-            pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
-
-            pred_pose_transl = pred_params[:, :, 9:]
-            return log_prob, z, pred_pose_6d, pred_pose_transl
-
-        else:
-            rot = batch['rot_matrix']  # [batch_size,3,3]
-            rot = rot.reshape(batch_size, -1).to(feats.dtype)
-            transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
-            samples = torch.cat([rot, transl],dim=1)
-            log_prob, z = self.flow.log_prob(samples, feats)
-
-            return log_prob, z#, pred_pose_6d, pred_pose_transl
+        pred_pose_transl = pred_params[:, :, 6:]
+        return log_prob, z, pred_pose_6d, pred_pose_transl

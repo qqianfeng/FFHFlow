@@ -15,7 +15,6 @@ class GraspFlow(nn.Module):
     """
     def __init__(self, cfg: CfgNode):
         """
-        Probabilistic SMPL head using Normalizing Flows.
         Args:
             cfg (CfgNode): Model config as yacs CfgNode.
         """
