@@ -9,7 +9,10 @@ from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
 
 class GraspFlow(nn.Module):
-
+    """
+    Normalizing flow implemented according to PROHMR paper. The forward and backward direction are both computed for loss.
+    So 'grasp' -> 'z' and also 'z' -> 'grasp'.
+    """
     def __init__(self, cfg: CfgNode):
         """
         Probabilistic SMPL head using Normalizing Flows.
