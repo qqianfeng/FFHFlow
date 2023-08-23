@@ -1,12 +1,36 @@
+import math
+from typing import Dict, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast
-from typing import Optional, Dict, Tuple
 from nflows.flows import ConditionalGlow
+from torch import Tensor
 from yacs.config import CfgNode
 
 from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
+
+class PositionalEncoding(nn.Module):
+    """
+    Original from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    """
+
+    def __init__(self,  d_model: int):
+        super().__init__()
+        self.d_model = d_model
+        self.div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+
+    def forward(self, x: Tensor) -> Tensor:
+        """
+        Arguments:
+            x: Tensor, shape ``[3, batch_size]``
+        """
+        batch_size = x.shape[1]
+        pe = torch.zeros(3, batch_size, self.d_model)
+        for i in range(batch_size):
+            pe[:, i, 0::2] = torch.sin(x[:,i].reshape(3,1) * self.div_term)
+
+        return pe
 
 class LocalInnFlow(nn.Module):
     """
@@ -22,6 +46,7 @@ class LocalInnFlow(nn.Module):
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=None)
+        self.pos_enc = PositionalEncoding(d_model=4)
 
     def log_prob(self, batch: Dict) -> Tuple:
         """

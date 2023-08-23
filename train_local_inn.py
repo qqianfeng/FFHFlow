@@ -30,7 +30,7 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', 
 
 # Set up model
 # model = FFHFlow(cfg)
-model = FFHFlowNormal(cfg)
+model = FFHFlowVAE(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
@@ -41,7 +41,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = '/home/yb/workspace/ffhflow/checkpoints/epoch=7-step=97261.ckpt'
+# ckpt_path = '/home/yb/workspace/ffhflow/checkpoints/epoch=7-step=97261.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -55,8 +55,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      precision=16,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
-                     callbacks=[checkpoint_callback],
-                     resume_from_checkpoint=ckpt_path)
+                     callbacks=[checkpoint_callback])
+                    #  resume_from_checkpoint=ckpt_path)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
