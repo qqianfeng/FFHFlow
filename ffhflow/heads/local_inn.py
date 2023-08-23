@@ -23,7 +23,7 @@ class LocalInnFlow(nn.Module):
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=None)
 
-    def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
+    def log_prob(self, batch: Dict) -> Tuple:
         """
         Compute the log-probability of a set of samples given a batch of images.
         Args:
@@ -35,18 +35,17 @@ class LocalInnFlow(nn.Module):
         """
 
         # feats = feats.float()  # same as to(torch.float32)  [64,1024]
-        batch_size = feats.shape[0]
 
         samples = batch['rot_matrix']  # [batch_size,3,3]
+        batch_size = samples.shape[0]
 
-        samples = samples.reshape(batch_size, -1).to(feats.dtype)
-        feats = feats.reshape(batch_size, -1)
-        log_prob, z = self.flow.log_prob(samples, feats)
+        grasp_samples = samples.reshape(batch_size, -1).to(feats.dtype)
+        log_prob, z = self.flow.log_prob(grasp_samples)
         log_prob = log_prob.reshape(batch_size, 1)
         z = z.reshape(batch_size, 1, -1)
         return log_prob, z
 
-    def forward(self, feats: torch.Tensor, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None) -> Tuple:
+    def forward(self, batch, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None) -> Tuple:
         """
         Run a forward pass of the model.
         If z is not specified, then the model randomly draws num_samples samples for each image in the batch.
@@ -64,13 +63,11 @@ class LocalInnFlow(nn.Module):
         """
         # feats = feats.float()
 
-        batch_size = feats.shape[0]
-
-        # we always sample z from prior
-        assert z is None
+        batch_size = batch[0].shape[0]
 
         # Generates samples from the distribution together with their log probability.
-        samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+        samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, noise=z)
+
         z = z.reshape(batch_size, num_samples, -1)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
@@ -78,5 +75,5 @@ class LocalInnFlow(nn.Module):
         pred_pose_6d = pred_pose.clone()
         pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
-        pred_pose_transl = pred_params[:, :, 6:]
-        return log_prob, z, pred_pose_6d, pred_pose_transl
+        # pred_pose_transl = pred_params[:, :, 6:]
+        return log_prob, z, pred_pose_6d #, pred_pose_transl

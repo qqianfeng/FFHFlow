@@ -11,3 +11,4 @@
 
 from .pointnet import PointNetfeat
 from .ffhgenerator import FFHGenerator, BPSMLP
+from .vae import BPSVAE
