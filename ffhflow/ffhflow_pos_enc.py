@@ -69,7 +69,7 @@ class FFHFlowPosEnc(pl.LightningModule):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlow(cfg)
+        self.flow = GraspFlowPosEnc(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss

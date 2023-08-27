@@ -18,7 +18,7 @@ class GraspFlowPosEnc(nn.Module):
         Args:
             cfg (CfgNode): Model config as yacs CfgNode.
         """
-        super(GraspFlow, self).__init__()
+        super(GraspFlowPosEnc, self).__init__()
         self.cfg = cfg
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
