@@ -150,12 +150,10 @@ class BPSMLP(nn.Module):
         """ Bring input tensors to correct dtype and device. Set whether gradient is required depending on
         we are in train or eval mode.
         """
-        self.rot_matrix = data["rot_matrix"].to(dtype=self.dtype)
         self.transl = data["transl"].to(dtype=self.dtype)
         self.joint_conf = data["joint_conf"].to(dtype=self.dtype)
         self.bps_object = data["bps_object"].to(dtype=self.dtype).contiguous()
 
-        self.rot_matrix = self.rot_matrix.view(self.bps_object.shape[0], -1)
 
     def forward(self, data):
         """Run one forward iteration to evaluate the success probability of given grasps

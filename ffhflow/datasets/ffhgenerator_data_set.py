@@ -6,6 +6,7 @@ import sys
 import torch
 from torch.utils import data
 import open3d as o3d
+import transforms3d
 
 sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..'))
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
@@ -148,10 +149,16 @@ class FFHGeneratorDataset(data.Dataset):
             visualization.show_grasp_and_object(bps_path, palm_pose_centr, joint_conf)
 
         # Build output dict
-        data_out = {'rot_matrix': palm_rot_matrix,\
-                    'transl': palm_transl,\
-                    'joint_conf': joint_conf,\
-                    'bps_object': bps_obj}
+        # data_out = {'rot_matrix': palm_rot_matrix,\
+        #             'transl': palm_transl,\
+        #             'joint_conf': joint_conf,\
+        #             'bps_object': bps_obj}
+
+        alpha, beta, gamma = transforms3d.euler.mat2euler(palm_rot_matrix)
+        data_out = {'angle_vector': np.array([alpha, beta, gamma]),\
+            'transl': palm_transl,\
+            'joint_conf': joint_conf,\
+            'bps_object': bps_obj}
 
         # If we want to evaluate, also return the pcd path to load from for vis
         # if self.cfg["ds_name"] == 'eval':
@@ -318,10 +325,20 @@ if __name__ == '__main__':
     path = os.path.dirname(os.path.abspath(__file__))
     BASE_PATH = os.path.split(os.path.split(path)[0])[0]
 
-    path = os.path.join(BASE_PATH, "ffhflow/configs/prohmr.yaml")
+    path = os.path.join(BASE_PATH, "ffhflow/configs/local_inn.yaml")
     cfg = get_config(path)
     gds = FFHGeneratorDataset(cfg)
 
     while True:
         i = np.random.randint(0, gds.__len__())
         gds.__getitem__(i)
+
+    # save angle vector npy
+    # print(len(gds))
+    # angle_vectors = np.zeros((len(gds),3))
+    # for i in range(len(gds)):
+    #     # i = np.random.randint(0, gds.__len__())
+    #     data = gds.__getitem__(i)
+    #     angle_vectors[i] = data['angle_vector']
+
+    # np.save('angle_vector.npy',angle_vectors)

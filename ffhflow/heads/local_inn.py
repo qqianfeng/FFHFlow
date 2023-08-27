@@ -9,28 +9,54 @@ from yacs.config import CfgNode
 
 from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
+# class PositionalEncodingLocalINN(nn.Module):
+#     def __init__(self,  d_model: int):
+
 
 class PositionalEncoding(nn.Module):
     """
     Original from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+    grasp pose rotational matrix -> euler angle [alpha, beta, gamma] has range of [-pi, pi], [-pi/3,pi/2], [-pi, pi]
     """
 
-    def __init__(self,  d_model: int):
+    def __init__(self):
         super().__init__()
-        self.d_model = d_model
-        self.div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
 
-    def forward(self, x: Tensor) -> Tensor:
-        """
-        Arguments:
-            x: Tensor, shape ``[3, batch_size]``
-        """
-        batch_size = x.shape[1]
-        pe = torch.zeros(3, batch_size, self.d_model)
-        for i in range(batch_size):
-            pe[:, i, 0::2] = torch.sin(x[:,i].reshape(3,1) * self.div_term)
+    def forward(self, angle_vec, d=4) -> Tensor:
+        """_summary_
 
-        return pe
+        Args:
+            angle_vec (_type_): [batch_size, 3]
+            n (int, optional): _description_. Defaults to 10000.
+            d (int, optional): _description_. Defaults to 4.
+
+        Returns:
+            Tensor: _description_
+        """
+        n = torch.Tensor([10]).to(angle_vec.get_device())
+        P = torch.zeros((angle_vec.shape[0], angle_vec.shape[1], d)).to(angle_vec.get_device())
+        for k in range(angle_vec.shape[1]):
+            for i in torch.arange(int(d/2)):
+                denominator = torch.pow(n, 2*i/d) # n^0=1 ,n^0.5
+                P[:, k, 2*i] = torch.sin(angle_vec[:,k]/denominator)
+                P[:, k, 2*i+1] = torch.cos(angle_vec[:,k]/denominator)
+
+        return P
+
+    def backward(self, P: Tensor) -> Tensor:
+        """_summary_
+
+        Args:
+            P (Tensor): [batch_size, 3, 4]
+
+        Returns:
+            Tensor: _description_
+        """
+        batch_size = P.shape[0]
+        angle_vec = torch.zeros([batch_size,3]).to(P.get_device())
+        for i in range(3):
+            angle_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1])
+        return angle_vec
 
 class LocalInnFlow(nn.Module):
     """
@@ -102,3 +128,10 @@ class LocalInnFlow(nn.Module):
 
         # pred_pose_transl = pred_params[:, :, 6:]
         return log_prob, z, pred_pose_6d #, pred_pose_transl
+
+if __name__ == "__main__":
+    pe = PositionalEncoding()
+    angle_vector = torch.tensor([[0.5,1.0,1.5],[2.0,2.5,3]])
+    encoded_angle = pe.forward(angle_vector)
+    decoded_angle = pe.backward(encoded_angle)
+    print(torch.allclose(decoded_angle, angle_vector,atol=1e-09))

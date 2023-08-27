@@ -9,6 +9,7 @@ from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow import FFHFlow
 from ffhflow.ffhflow_normal import FFHFlowNormal
+from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
@@ -28,8 +29,8 @@ if not os.path.isfile(fname):
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
 
 # Set up model
-# model = FFHFlow(cfg)
-model = FFHFlowNormal(cfg)
+model = FFHFlowPosEnc(cfg)
+# model = FFHFlowNormal(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
@@ -54,8 +55,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      precision=16,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
-                     callbacks=[checkpoint_callback],
-                     resume_from_checkpoint=ckpt_path)
+                     callbacks=[checkpoint_callback])
+                    #  resume_from_checkpoint=ckpt_path)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
