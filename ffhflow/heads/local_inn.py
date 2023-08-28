@@ -41,6 +41,26 @@ class PositionalEncoding(nn.Module):
 
         return P
 
+    def forward_localinn(self, angle_vec, d=20) -> Tensor:
+        """_summary_
+
+        Args:
+            angle_vec (_type_): [batch_size, 3]
+            n (int, optional): _description_. Defaults to 10000.
+            d (int, optional): _description_. Defaults to 4.
+
+        Returns:
+            Tensor: _description_
+        """
+        P = torch.zeros((angle_vec.shape[0], angle_vec.shape[1], d)).to(angle_vec.device)
+        for k in range(angle_vec.shape[1]):
+            for i in torch.arange(int(d/2)):
+                denominator = torch.Tensor([2**i]).to(angle_vec.device)  # n^0=1 ,n^0.5
+                P[:, k, 2*i] = torch.sin(angle_vec[:,k] * denominator)
+                P[:, k, 2*i+1] = torch.cos(angle_vec[:,k] * denominator)
+
+        return P
+
     def backward(self, P: Tensor) -> Tensor:
         """_summary_
 
@@ -55,13 +75,14 @@ class PositionalEncoding(nn.Module):
         for i in range(3):
             angle_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1])
 
-        # Test backward pass
+        # # Test backward pass
         # angle_vec_test = torch.zeros([batch_size,3]).to(P.device)
         # for i in range(3):
         #     angle_vec_test[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) * torch.pow(torch.Tensor([10]).to(angle_vec.device), torch.Tensor([0.5]).to(angle_vec.device))
         # print(torch.allclose(angle_vec, angle_vec_test, atol=1e-09))
 
         return angle_vec
+
 
 class LocalInnFlow(nn.Module):
     """

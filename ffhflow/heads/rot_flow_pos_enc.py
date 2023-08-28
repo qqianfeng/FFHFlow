@@ -44,7 +44,7 @@ class GraspFlowPosEnc(nn.Module):
 
         # input of positional encoded angles
         samples = batch['angle_vector']  # [batch_size,3,3]
-        samples = self.pe.forward(samples)
+        samples = self.pe.forward_localinn(samples)
 
         samples = samples.reshape(batch_size, -1).to(feats.dtype)
         feats = feats.reshape(batch_size, -1)
@@ -86,7 +86,7 @@ class GraspFlowPosEnc(nn.Module):
         # pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
         # decode
-        pred_params = pred_params.reshape(batch_size,3,4)
+        pred_params = pred_params.reshape(batch_size,3,-1)
         # pred_pose_transl = pred_params[:, :, 6:]
         pred_angles = self.pe.backward(pred_params)
         return log_prob, z, pred_angles, None
