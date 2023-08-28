@@ -6,7 +6,7 @@ from typing import Any, Dict, Tuple
 from yacs.config import CfgNode
 
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
-from .heads import GraspFlowNormal
+from .heads import GraspFlowNormal, GraspFlowPosEnc, GraspFlowNormalPosEnc
 from .utils import utils
 
 
@@ -49,7 +49,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlowNormal(pl.LightningModule):
+class FFHFlowNormalPosEnc(pl.LightningModule):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -69,7 +69,7 @@ class FFHFlowNormal(pl.LightningModule):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlowNormal(cfg)
+        self.flow = GraspFlowNormalPosEnc(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
@@ -166,41 +166,40 @@ class FFHFlowNormal(pl.LightningModule):
         num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
         conditioning_feats = output['conditioning_feats']
 
-        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples,train=False)
-        pred_pose_6d = pred_pose_rot.view(-1,6)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
+        log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
         batch_size = self.cfg.TRAIN.BATCH_SIZE
-        gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+
+        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
 
-        rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
-        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
-        log_prob = output['log_prod']
+        log_prob2 = output['log_prod']
 
         loss_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
-        pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
-        loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
-        loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
         if self.current_epoch <= 8:
             loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
         else:
             loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
-               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
-                    loss_pose_6d=loss_pose_6d.detach(),
-                    rot_loss=rot_loss.detach(),
-                    transl_loss=transl_loss.detach())
+                    rot_loss=rot_loss.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
+                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 

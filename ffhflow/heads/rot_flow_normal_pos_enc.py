@@ -22,6 +22,7 @@ class GraspFlowNormalPosEnc(nn.Module):
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
+        self.pe = PositionalEncoding()
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
@@ -82,18 +83,20 @@ class GraspFlowNormalPosEnc(nn.Module):
             z = z.reshape(batch_size, num_samples, -1)
             pred_params = samples.reshape(batch_size, num_samples, -1)
 
-            pred_pose = pred_params[:, :, :6]
-            pred_pose_6d = pred_pose.clone()
-            pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
+            # decode
+            pred_params = pred_params.reshape(batch_size,3,-1)
+            # pred_pose_transl = pred_params[:, :, 6:]
+            pred_angles = self.pe.backward(pred_params)
 
-            pred_pose_transl = pred_params[:, :, 9:]
-            return log_prob, z, pred_pose_6d, pred_pose_transl
+            return log_prob, z, pred_angles, None
 
         else:
-            rot = batch['angle_vector']  # [batch_size,3,3]
-            rot = rot.reshape(batch_size, -1).to(feats.dtype)
-            transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
-            samples = torch.cat([rot, transl],dim=1)
+            samples = batch['angle_vector']  # [batch_size,3,3]
+            samples = self.pe.forward_localinn(samples)
+            samples = samples.reshape(batch_size, -1).to(feats.dtype)
+
+            # transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
+            # samples = torch.cat([rot, transl],dim=1)
             log_prob, z = self.flow.log_prob(samples, feats)
 
             return log_prob, z#, pred_pose_6d, pred_pose_transl
