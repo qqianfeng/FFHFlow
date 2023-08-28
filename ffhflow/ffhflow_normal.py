@@ -192,7 +192,10 @@ class FFHFlowNormal(pl.LightningModule):
         loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
+        if self.current_epoch <= 8:
+            loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+        else:
+            loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
                self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
                self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
                self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
