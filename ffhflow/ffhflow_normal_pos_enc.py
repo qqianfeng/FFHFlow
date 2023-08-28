@@ -220,16 +220,13 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
         conditioning_feats = output['conditioning_feats']
 
-        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples,train=False)
-        pred_pose_6d = pred_pose_rot.view(-1,6)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
+        log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
         batch_size = self.cfg.TRAIN.BATCH_SIZE
-        gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+
+        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
 
-        rot_loss = self.rot_6D_l2_loss(pred_pose_6d, gt_rot_matrix, self.L2_loss, self.device)
-        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
-        # # TODO: add joint as loss
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
@@ -308,7 +305,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             Dict: Dictionary containing regression output.
         """
         output = self.forward_step(batch, train=False)
-        loss = self.compute_val_loss(batch, output)
+        loss = self.compute_loss(batch, output)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
