@@ -7,16 +7,14 @@ from nflows.flows import ConditionalGlow
 from torch import Tensor
 from yacs.config import CfgNode
 
-from ffhflow.utils.utils import rot_matrix_from_ortho6d
+# from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
-# class PositionalEncodingLocalINN(nn.Module):
-#     def __init__(self,  d_model: int):
 
 
 class PositionalEncoding(nn.Module):
     """
     Original from https://pytorch.org/tutorials/beginner/transformer_tutorial.html
-    grasp pose rotational matrix -> euler angle [alpha, beta, gamma] has range of [-pi, pi], [-pi/3,pi/2], [-pi, pi]
+    grasp pose rotational matrix -> euler angle [alpha, beta, gamma] has range of [-pi, pi], [-pi/2,pi/2], [-pi, pi]
     """
 
     def __init__(self):
@@ -33,11 +31,11 @@ class PositionalEncoding(nn.Module):
         Returns:
             Tensor: _description_
         """
-        n = torch.Tensor([10]).to(angle_vec.get_device())
-        P = torch.zeros((angle_vec.shape[0], angle_vec.shape[1], d)).to(angle_vec.get_device())
+        n = torch.Tensor([10]).to(angle_vec.device)
+        P = torch.zeros((angle_vec.shape[0], angle_vec.shape[1], d)).to(angle_vec.device)
         for k in range(angle_vec.shape[1]):
             for i in torch.arange(int(d/2)):
-                denominator = torch.pow(n, 2*i/d) # n^0=1 ,n^0.5
+                denominator = torch.pow(n, torch.Tensor([2*i/d]).to(angle_vec.device)) # n^0=1 ,n^0.5
                 P[:, k, 2*i] = torch.sin(angle_vec[:,k]/denominator)
                 P[:, k, 2*i+1] = torch.cos(angle_vec[:,k]/denominator)
 
@@ -53,9 +51,16 @@ class PositionalEncoding(nn.Module):
             Tensor: _description_
         """
         batch_size = P.shape[0]
-        angle_vec = torch.zeros([batch_size,3]).to(P.get_device())
+        angle_vec = torch.zeros([batch_size,3]).to(P.device)
         for i in range(3):
             angle_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1])
+
+        # Test backward pass
+        # angle_vec_test = torch.zeros([batch_size,3]).to(P.device)
+        # for i in range(3):
+        #     angle_vec_test[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) * torch.pow(torch.Tensor([10]).to(angle_vec.device), torch.Tensor([0.5]).to(angle_vec.device))
+        # print(torch.allclose(angle_vec, angle_vec_test, atol=1e-09))
+
         return angle_vec
 
 class LocalInnFlow(nn.Module):
@@ -122,16 +127,81 @@ class LocalInnFlow(nn.Module):
         z = z.reshape(batch_size, num_samples, -1)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
-        pred_pose = pred_params[:, :, :6]
-        pred_pose_6d = pred_pose.clone()
-        pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
+        # pred_pose = pred_params[:, :, :6]
+        # pred_pose_6d = pred_pose.clone()
+        # pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
         # pred_pose_transl = pred_params[:, :, 6:]
         return log_prob, z, pred_pose_6d #, pred_pose_transl
 
 if __name__ == "__main__":
     pe = PositionalEncoding()
-    angle_vector = torch.tensor([[0.5,1.0,1.5],[2.0,2.5,3]])
+    angle_vector = torch.tensor([[-0.6154, -0.1396, -2.9588],
+        [-2.9998, -0.1904,  1.4876],
+        [ 0.5587, -0.3360,  1.2632],
+        [-0.8274,  0.4835,  2.9523],
+        [-1.0283, -0.9779, -2.9851],
+        [-3.0229, -0.3011,  0.0157],
+        [-2.8174,  0.4655,  0.2709],
+        [-2.9825,  0.8776,  0.1904],
+        [ 2.2218,  0.7480,  2.6583],
+        [-1.1349,  0.4133,  2.7053],
+        [ 2.8937, -0.3148,  1.5909],
+        [-2.9633, -0.9354, -0.6648],
+        [ 1.6407, -0.2167,  1.6164],
+        [ 2.8057, -0.6806,  0.0401],
+        [-2.8803, -0.0648,  0.2265],
+        [-0.7335, -0.1495, -3.1232],
+        [-0.8460, -0.5731,  3.1134],
+        [ 2.7425, -0.1326,  0.1035],
+        [-2.2209, -0.4443,  1.4374],
+        [-2.9735, -0.6370, -0.2321],
+        [-0.6740, -0.3343,  1.5985],
+        [ 2.5635, -0.1939,  1.5283],
+        [-0.6194, -0.5937,  1.0297],
+        [-2.6090, -0.2300,  1.5648],
+        [-2.2115, -0.2953,  1.7447],
+        [-1.7352, -1.2529, -2.0672],
+        [-1.0203,  0.2174,  2.9435],
+        [-2.6192, -0.5148,  1.7574],
+        [ 1.8217, -0.3006,  1.5263],
+        [-0.0624, -0.2909,  1.6260],
+        [ 2.9030, -0.7467,  1.4144],
+        [-2.2557, -0.4346,  1.6270],
+        [-2.1944,  1.0961,  1.3689],
+        [-1.1343, -1.1316, -2.5927],
+        [-3.0614, -0.3313,  1.5335],
+        [-0.7529, -1.3716, -2.9479],
+        [-1.5070, -1.3445, -1.6168],
+        [-1.0722, -1.2446, -2.3524],
+        [ 1.6423, -0.0880,  1.7376],
+        [ 0.1122, -0.3033,  1.7356],
+        [-0.7854, -0.4743, -3.0053],
+        [-2.1391, -0.3432,  1.5907],
+        [-0.7667, -0.5808,  3.0788],
+        [ 0.5750, -0.3188,  1.6127],
+        [-1.7729, -1.1738, -1.3514],
+        [-2.9754,  0.3503, -0.0059],
+        [ 1.6286, -0.8194,  1.3705],
+        [ 1.8944, -0.2774,  1.5707],
+        [-2.9414, -0.2306, -0.2958],
+        [ 0.7513, -0.6300,  1.9068],
+        [-1.0796,  0.6809,  2.7834],
+        [-3.1282, -0.2981,  1.5454],
+        [ 2.3604, -0.3592,  1.6080],
+        [-1.8079,  0.7735,  1.8610],
+        [-1.0607, -0.3402,  1.7830],
+        [-2.9246,  0.1922,  0.2942],
+        [-2.5403,  0.9839,  1.3718],
+        [ 3.0537, -0.2071,  1.3226],
+        [-2.2396,  1.1143,  1.2166],
+        [-2.9918,  0.7664,  0.6178],
+        [-1.5151, -0.2733,  1.6056],
+        [ 3.0073, -0.8204, -0.2505],
+        [-0.1926,  0.6698,  1.0936],
+        [-0.4912, -0.2851,  1.5580]], device='cuda:0')
+    angle_vector.max()
+    angle_vector.min()
     encoded_angle = pe.forward(angle_vector)
     decoded_angle = pe.backward(encoded_angle)
     print(torch.allclose(decoded_angle, angle_vector,atol=1e-09))
