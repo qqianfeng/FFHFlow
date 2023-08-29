@@ -234,6 +234,22 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
 
         return loss
 
+    def conver_euler_to_rot_matrix_torch(self, pred_angles: Tensor, arr_output=False):
+        # TODO: go to utils
+        # convert [batch_size, 3] angles to matrix.
+        batch_size = pred_angles.shape[0]
+        pred_angles_np = pred_angles.cpu().data.numpy()
+        pred_rot_matrix_np = np.zeros((batch_size,9))
+        for idx in range(batch_size):
+            a,b,c = pred_angles_np[idx]
+            rot_mat = transforms3d.euler.euler2mat(a,b,c)
+            pred_rot_matrix_np[idx] = rot_mat.flatten()
+        if arr_output:
+            return pred_rot_matrix_np
+        else:
+            pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
+            return pred_rot_matrix
+
     def compute_val_loss(self, batch: Dict, output: Dict) -> torch.Tensor:
         """
         Compute losses given the input batch and the regression output
@@ -253,6 +269,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         batch_size = self.cfg.TRAIN.BATCH_SIZE
 
         gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
+        gt_angles = batch['angle_vector']
         gt_transl = batch['transl']
 
         # TODO: go to utils
@@ -367,3 +384,18 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
 
         for loss_name, val in losses.items():
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
+
+
+    def show_grasps(self, batch, output: Dict):
+
+        batch_size = output['pred_angles'].shape[0]
+        pred_rot_matrix = self.conver_euler_to_rot_matrix_torch(output['pred_angles'],arr_output=True)
+        pred_rot_matrix = pred_rot_matrix.reshape((batch_size,3,3))
+
+        # pred_transl = output['transl'].cpu().data.numpy()
+        pred_transl = np.ones((batch_size,3))
+
+        # TODO: check here, we only extract grasps being generated from one pcd/bps
+        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
+
+        show_generated_grasp_distribution(batch['pcd_path'][0] ,grasps)
