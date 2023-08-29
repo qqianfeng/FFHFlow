@@ -153,11 +153,15 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
-        log_prob, _ = self.flow(batch, conditioning_feats)
+        if train:
+            log_prob, _ = self.flow(batch, conditioning_feats)
+            pred_angles = 0
+        else:
+            log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
 
         output = {}
         output['log_prod'] = log_prob
-        # output['pred_pose_rot'] = pred_pose_rot
+        output['pred_angles'] = pred_angles
         # output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
 
