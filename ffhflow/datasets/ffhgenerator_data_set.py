@@ -148,17 +148,12 @@ class FFHGeneratorDataset(data.Dataset):
             # Visualize full hand config
             visualization.show_grasp_and_object(bps_path, palm_pose_centr, joint_conf)
 
-        # Build output dict
-        # data_out = {'rot_matrix': palm_rot_matrix,\
-        #             'transl': palm_transl,\
-        #             'joint_conf': joint_conf,\
-        #             'bps_object': bps_obj}
-
         alpha, beta, gamma = transforms3d.euler.mat2euler(palm_rot_matrix)
-        data_out = {'angle_vector': np.array([alpha, beta, gamma]),\
-            'transl': palm_transl,\
-            'joint_conf': joint_conf,\
-            'bps_object': bps_obj}
+        data_out = {'rot_matrix': palm_rot_matrix,\
+                    'angle_vector': np.array([alpha, beta, gamma]),\
+                    'transl': palm_transl,\
+                    'joint_conf': joint_conf,\
+                    'bps_object': bps_obj}
 
         # If we want to evaluate, also return the pcd path to load from for vis
         # if self.cfg["ds_name"] == 'eval':
