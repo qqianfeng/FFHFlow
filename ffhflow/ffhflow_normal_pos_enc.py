@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import pytorch_lightning as pl
 from typing import Any, Dict, Tuple
+import transforms3d
 
 from yacs.config import CfgNode
 
@@ -49,6 +50,29 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
+def rot_mat_l2_loss(pred_rot_matrix,
+                    gt_rot_matrix,
+                    torch_l2_loss_fn,
+                    device='cpu'):
+    """Takes in the 3D translation and 6D rotation prediction and computes l2 loss to ground truth 3D translation
+    and 3x3 rotation matrix by translforming the 6D rotation to 3x3 rotation matrix.
+
+    Args:
+        pred_transl_rot_6D (_type_): rotation representation of 6 D
+        gt_transl_rot_matrix (_type_): roration matrix [3,3] + translation
+        torch_l2_loss_fn (_type_): _description_
+        device (str, optional): _description_. Defaults to 'cpu'.
+
+    Returns:
+        _type_: _description_
+    """
+    pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
+    gt_rot_matrix = gt_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
+    # l2 loss on rotation matrix
+    l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
+
+    return l2_loss_rot
+
 class FFHFlowNormalPosEnc(pl.LightningModule):
 
     def __init__(self, cfg: CfgNode):
@@ -74,6 +98,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
         self.transl_l2_loss = transl_l2_loss
+        self.rot_mat_l2_loss = rot_mat_l2_loss
 
         self.L2_loss = torch.nn.MSELoss(reduction='mean')
 
@@ -223,10 +248,20 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
         batch_size = self.cfg.TRAIN.BATCH_SIZE
 
-        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
+        gt_rot_matrix = batch['rot_matrix']  # [batch_size, 3,3]
         gt_transl = batch['transl']
 
-        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        # TODO: go to utils
+        # convert [batch_size, 3] angles to matrix.
+        pred_angles_np = pred_angles.cpu().data.numpy()
+        pred_rot_matrix_np = np.zeros((batch_size,9))
+        for idx in range(batch_size):
+            a,b,c = pred_angles_np[idx]
+            rot_mat = transforms3d.euler.euler2mat(a,b,c)
+            pred_rot_matrix_np[idx] = rot_mat.flatten()
+        pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
+        rot_loss = self.rot_mat_l2_loss(pred_rot_matrix, gt_rot_matrix, self.L2_loss, self.device)
+        # rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
@@ -239,21 +274,21 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         loss_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
-        pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
-        loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
-        loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
-               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
-                    loss_pose_6d=loss_pose_6d.detach(),
-                    rot_loss=rot_loss.detach(),
-                    transl_loss=transl_loss.detach())
+                    rot_loss=rot_loss.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
+                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 
@@ -305,7 +340,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             Dict: Dictionary containing regression output.
         """
         output = self.forward_step(batch, train=False)
-        loss = self.compute_loss(batch, output)
+        loss = self.compute_val_loss(batch, output)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
