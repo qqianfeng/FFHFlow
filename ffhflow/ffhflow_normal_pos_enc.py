@@ -156,13 +156,14 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         if train:
             log_prob, _ = self.flow(batch, conditioning_feats)
             pred_angles = 0
+            pred_pose_transl = 0
         else:
             log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
 
         output = {}
         output['log_prod'] = log_prob
         output['pred_angles'] = pred_angles
-        # output['pred_pose_transl'] = pred_pose_transl
+        output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
 
         return output
@@ -202,9 +203,10 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         gt_transl = batch['transl']
 
         rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
-        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
+        # TODO: We don't use this log_prob but why ???
         conditioning_feats = output['conditioning_feats']
         log_prob2 = output['log_prod']
 
@@ -234,7 +236,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
 
         return loss
 
-    def conver_euler_to_rot_matrix_torch(self, pred_angles: Tensor, arr_output=False):
+    def convert_euler_to_rot_matrix_torch(self, pred_angles: torch.Tensor, arr_output=False):
         # TODO: go to utils
         # convert [batch_size, 3] angles to matrix.
         batch_size = pred_angles.shape[0]
@@ -282,7 +284,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             pred_rot_matrix_np[idx] = rot_mat.flatten()
         pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
         rot_loss = self.rot_mat_l2_loss(pred_rot_matrix, gt_rot_matrix, self.L2_loss, self.device)
-        # rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
@@ -291,7 +293,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         # if train:
         #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
 
-        log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
+        log_prob2, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
@@ -301,15 +303,15 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
 
         # combine all the losses
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
-                    rot_loss=rot_loss.detach())
+                    rot_loss=rot_loss.detach(),
+                    transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
-                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 

@@ -42,10 +42,13 @@ class GraspFlowNormalPosEnc(nn.Module):
         # samples = batch['rot_matrix']  # [batch_size,3,3]
 
         # input of positional encoded angles
-        samples = batch['angle_vector']  # [batch_size,3,3]
-        samples = self.pe.forward_localinn(samples)
+        angles = batch['angle_vector']  # [batch_size,3,3]
+        angles = self.pe.forward_localinn(angles)
+        angles = angles.reshape(batch_size, -1).to(feats.dtype)
 
-        samples = samples.reshape(batch_size, -1).to(feats.dtype)
+        transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
+        samples = torch.cat([angles, transl],dim=1)
+
         feats = feats.reshape(batch_size, -1)
         log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
@@ -84,19 +87,20 @@ class GraspFlowNormalPosEnc(nn.Module):
             pred_params = samples.reshape(batch_size, num_samples, -1)
 
             # decode
-            pred_params = pred_params.reshape(batch_size,3,-1)
-            # pred_pose_transl = pred_params[:, :, 6:]
-            pred_angles = self.pe.backward(pred_params)
+            pred_angles = pred_params[:,:,:-3]
+            pred_angles = pred_angles.reshape(batch_size,3,-1)
+            pred_angles = self.pe.backward(pred_angles)
 
-            return log_prob, z, pred_angles, None
+            pred_transl = pred_params[:,:,-3:]
+            return log_prob, z, pred_angles, pred_transl
 
         else:
-            samples = batch['angle_vector']  # [batch_size,3,3]
-            samples = self.pe.forward_localinn(samples)
-            samples = samples.reshape(batch_size, -1).to(feats.dtype)
+            angles = batch['angle_vector']  # [batch_size,3,3]
+            angles = self.pe.forward_localinn(angles)
+            angles = angles.reshape(batch_size, -1).to(feats.dtype)
 
-            # transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
-            # samples = torch.cat([rot, transl],dim=1)
+            transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
+            samples = torch.cat([angles, transl],dim=1)
             log_prob, z = self.flow.log_prob(samples, feats)
 
             return log_prob, z#, pred_pose_6d, pred_pose_transl
