@@ -222,15 +222,15 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
         else:
             loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
-            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
 
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
-                    rot_loss=rot_loss.detach())
+                    rot_loss=rot_loss.detach(),
+                    transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
-                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 
@@ -276,14 +276,16 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
 
         # TODO: go to utils
         # convert [batch_size, 3] angles to matrix.
-        pred_angles_np = pred_angles.cpu().data.numpy()
-        pred_rot_matrix_np = np.zeros((batch_size,9))
-        for idx in range(batch_size):
-            a,b,c = pred_angles_np[idx]
-            rot_mat = transforms3d.euler.euler2mat(a,b,c)
-            pred_rot_matrix_np[idx] = rot_mat.flatten()
-        pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
-        rot_loss = self.rot_mat_l2_loss(pred_rot_matrix, gt_rot_matrix, self.L2_loss, self.device)
+        # pred_angles_np = pred_angles.cpu().data.numpy()
+        # pred_rot_matrix_np = np.zeros((batch_size,9))
+        # for idx in range(batch_size):
+        #     a,b,c = pred_angles_np[idx]
+        #     rot_mat = transforms3d.euler.euler2mat(a,b,c)
+        #     pred_rot_matrix_np[idx] = rot_mat.flatten()
+        # pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
+        # rot_loss = self.rot_mat_l2_loss(pred_rot_matrix, gt_rot_matrix, self.L2_loss, self.device)
+
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
