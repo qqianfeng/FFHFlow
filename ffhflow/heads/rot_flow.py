@@ -38,9 +38,12 @@ class GraspFlow(nn.Module):
         # feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
 
-        samples = batch['rot_matrix']  # [batch_size,3,3]
+        rot_matrix = batch['rot_matrix']  # [batch_size,3,3]
+        rot_matrix = rot_matrix.reshape(batch_size, -1).to(feats.dtype)
+        transl = batch['transl']
+        transl = transl.reshape(batch_size, -1).to(feats.dtype)
+        samples = torch.cat([rot_matrix, transl])
 
-        samples = samples.reshape(batch_size, -1).to(feats.dtype)
         feats = feats.reshape(batch_size, -1)
         log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
@@ -79,5 +82,5 @@ class GraspFlow(nn.Module):
         pred_pose_6d = pred_pose.clone()
         pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
 
-        pred_pose_transl = pred_params[:, :, 6:]
+        pred_pose_transl = pred_params[:, :, 9:] # in total 12 dim
         return log_prob, z, pred_pose_6d, pred_pose_transl
