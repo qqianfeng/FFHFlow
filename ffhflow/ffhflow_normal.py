@@ -1,13 +1,14 @@
 import torch
 import numpy as np
 import pytorch_lightning as pl
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from yacs.config import CfgNode
 
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
 from .heads import GraspFlowNormal
 from .utils import utils
+from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 
 def kl_divergence(mu, logvar, device="cpu"):
@@ -129,12 +130,17 @@ class FFHFlowNormal(pl.LightningModule):
             self.initialize(batch, conditioning_feats)
 
         log_prob, _ = self.flow(batch, conditioning_feats)
-
         output = {}
         output['log_prod'] = log_prob
-        # output['pred_pose_rot'] = pred_pose_rot
-        # output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
+
+        # train flag as flase means evaluation or inference, where flow runs as generative model
+        if train is False:
+            log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples,train=False)
+            pred_pose_6d = pred_pose_rot.view(-1,6)
+            pred_pose_transl = pred_pose_transl.view(-1,3)
+            output['pred_pose_6d'] = pred_pose_6d
+            output['pred_pose_transl'] = pred_pose_transl
 
         return output
 
@@ -315,6 +321,33 @@ class FFHFlowNormal(pl.LightningModule):
 
         return output
 
+    def sample(self, bps, num_samples):
+        """ generate number of grasp samples
+
+        Args:
+            bps (torch.Tensor): one bps object
+            num_samples (int): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bps = torch.tile(bps, (1,1))
+        # move data to cuda
+        bps_tensor = torch.tensor(bps).to('cuda')
+        batch = {'bps_object': bps_tensor}
+        self.backbone.to('cuda')
+        self.flow.to('cuda')
+
+        conditioning_feats = self.backbone(batch)
+        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples,train=False)
+        pred_pose_6d = pred_pose_rot.view(-1,6)
+        pred_pose_transl = pred_pose_transl.view(-1,3)
+
+        output = {}
+        output['pred_pose_6d'] = pred_pose_6d
+        output['pred_pose_transl'] = pred_pose_transl
+        return output
+
     def tensorboard_logging(self, batch: Dict, output: Dict, step_count: int, train: bool = True) -> None:
         """
         Log results to Tensorboard
@@ -332,3 +365,18 @@ class FFHFlowNormal(pl.LightningModule):
 
         for loss_name, val in losses.items():
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
+
+    def show_grasps(self, pcd_path, samples: Dict):
+        """Visualization of grasps
+
+        Args:
+            pcd_path (str): _description_
+            samples (Dict): _description_
+        """
+        num_samples = samples['pred_pose_6d'].shape[0]
+        pred_rot_matrix = utils.rot_matrix_from_ortho6d(samples['pred_pose_6d'])
+        pred_rot_matrix = pred_rot_matrix.reshape((num_samples, 3, 3))
+        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
+
+        grasps = {'rot_matrix': pred_rot_matrix.cpu().data.numpy(), 'transl': pred_transl}
+        show_generated_grasp_distribution(pcd_path ,grasps)

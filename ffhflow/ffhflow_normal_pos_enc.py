@@ -382,16 +382,17 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
 
 
-    def show_grasps(self, batch, output: Dict):
+    def show_grasps(self, pcd_path, samples: Dict):
+        """Visualization of grasps
 
-        batch_size = output['pred_angles'].shape[0]
-        pred_rot_matrix = self.conver_euler_to_rot_matrix_torch(output['pred_angles'],arr_output=True)
-        pred_rot_matrix = pred_rot_matrix.reshape((batch_size,3,3))
+        Args:
+            pcd_path (str): _description_
+            samples (Dict): _description_
+        """
+        num_samples = samples['pred_pose_6d'].shape[0]
+        pred_rot_matrix = utils.rot_matrix_from_ortho6d(samples['pred_pose_6d'])
+        pred_rot_matrix = pred_rot_matrix.reshape((num_samples, 3, 3))
+        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
 
-        # pred_transl = output['transl'].cpu().data.numpy()
-        pred_transl = np.ones((batch_size,3))
-
-        # TODO: check here, we only extract grasps being generated from one pcd/bps
-        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
-
-        show_generated_grasp_distribution(batch['pcd_path'][0] ,grasps)
+        grasps = {'rot_matrix': pred_rot_matrix.cpu().data.numpy(), 'transl': pred_transl}
+        show_generated_grasp_distribution(pcd_path ,grasps)

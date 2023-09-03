@@ -21,11 +21,6 @@ args = parser.parse_args()
 # Set up cfg
 cfg = get_config(args.model_cfg)
 
-# copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'hparams.yaml')
-if not os.path.isfile(fname):
-    shutil.copy(args.model_cfg, fname)
-
 # Setup Tensorboard logger
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
 
@@ -61,3 +56,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
+
+# copy the config file to save_dir
+fname = os.path.join(args.root_dir, 'tensorboard', 'hparams.yaml')
+if not os.path.isfile(fname):
+    shutil.copy(args.model_cfg, fname)
