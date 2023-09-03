@@ -150,8 +150,6 @@ class BPSMLP(nn.Module):
         """ Bring input tensors to correct dtype and device. Set whether gradient is required depending on
         we are in train or eval mode.
         """
-        self.transl = data["transl"].to(dtype=self.dtype)
-        self.joint_conf = data["joint_conf"].to(dtype=self.dtype)
         self.bps_object = data["bps_object"].to(dtype=self.dtype).contiguous()
 
 

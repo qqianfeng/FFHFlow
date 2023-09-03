@@ -9,6 +9,7 @@ from yacs.config import CfgNode
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
 from .heads import GraspFlowNormal, GraspFlowPosEnc, GraspFlowNormalPosEnc
 from .utils import utils
+from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 
 def kl_divergence(mu, logvar, device="cpu"):
@@ -196,6 +197,7 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
         conditioning_feats = output['conditioning_feats']
 
+        # log_prob comes from: log_prob, z = self.flow.log_prob(samples, feats)
         log_prob, _, pred_angles, pred_pose_transl = self.flow(batch, conditioning_feats, num_samples, train=False)
         batch_size = self.cfg.TRAIN.BATCH_SIZE
 
@@ -274,18 +276,13 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
         gt_angles = batch['angle_vector']
         gt_transl = batch['transl']
 
-        # TODO: go to utils
-        # convert [batch_size, 3] angles to matrix.
-        # pred_angles_np = pred_angles.cpu().data.numpy()
-        # pred_rot_matrix_np = np.zeros((batch_size,9))
-        # for idx in range(batch_size):
-        #     a,b,c = pred_angles_np[idx]
-        #     rot_mat = transforms3d.euler.euler2mat(a,b,c)
-        #     pred_rot_matrix_np[idx] = rot_mat.flatten()
-        # pred_rot_matrix = torch.from_numpy(pred_rot_matrix_np).to(pred_angles.device)
+        # Metrics of angle loss
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+
+        # Metrics of rot matrix loss
+        # pred_rot_matrix = self.conver_euler_to_rot_matrix_torch(pred_angles, arr_output=False)
         # rot_loss = self.rot_mat_l2_loss(pred_rot_matrix, gt_rot_matrix, self.L2_loss, self.device)
 
-        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
 
         # 2. Compute NLL loss
@@ -390,16 +387,17 @@ class FFHFlowNormalPosEnc(pl.LightningModule):
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
 
 
-    def show_grasps(self, batch, output: Dict):
+    def show_grasps(self, pcd_path, samples: Dict):
+        """Visualization of grasps
 
-        batch_size = output['pred_angles'].shape[0]
-        pred_rot_matrix = self.conver_euler_to_rot_matrix_torch(output['pred_angles'],arr_output=True)
-        pred_rot_matrix = pred_rot_matrix.reshape((batch_size,3,3))
+        Args:
+            pcd_path (str): _description_
+            samples (Dict): _description_
+        """
+        num_samples = samples['pred_pose_6d'].shape[0]
+        pred_rot_matrix = utils.rot_matrix_from_ortho6d(samples['pred_pose_6d'])
+        pred_rot_matrix = pred_rot_matrix.reshape((num_samples, 3, 3))
+        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
 
-        # pred_transl = output['transl'].cpu().data.numpy()
-        pred_transl = np.ones((batch_size,3))
-
-        # TODO: check here, we only extract grasps being generated from one pcd/bps
-        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
-
-        show_generated_grasp_distribution(batch['pcd_path'][0] ,grasps)
+        grasps = {'rot_matrix': pred_rot_matrix.cpu().data.numpy(), 'transl': pred_transl}
+        show_generated_grasp_distribution(pcd_path ,grasps)

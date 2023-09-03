@@ -14,8 +14,10 @@ from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
 from ffhflow.ffhflow_normal_pos_enc import FFHFlowNormalPosEnc
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
+# parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='models/ffhflow_normal_flow_continue_train_complete/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_normal_flow_continue_train_complete/epoch=12-step=154391.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -42,15 +44,15 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = '/home/yb/workspace/ffhflow/checkpoints/epoch=2-step=24931.ckpt'
+ckpt_path = args.ckpt_path
 
-model = FFHFlowNormalPosEnc.load_from_checkpoint(ckpt_path, cfg=cfg)
+model = FFHFlowNormal.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 val_loader = ffh_datamodule.val_dataloader()
 
 # Go over the images in the dataset.
-for i, batch in enumerate(tqdm(val_loader)):
-    with torch.no_grad():
-        out = model(batch)
+with torch.no_grad():
+    for i, batch in enumerate(val_loader):
+        out = model.sample(batch['bps_object'][0],num_samples=100)
         model.show_grasps(batch, out)
