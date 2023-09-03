@@ -42,7 +42,7 @@ class GraspFlow(nn.Module):
         rot_matrix = rot_matrix.reshape(batch_size, -1).to(feats.dtype)
         transl = batch['transl']
         transl = transl.reshape(batch_size, -1).to(feats.dtype)
-        samples = torch.cat([rot_matrix, transl])
+        samples = torch.cat([rot_matrix, transl], dim=1)
 
         feats = feats.reshape(batch_size, -1)
         log_prob, z = self.flow.log_prob(samples, feats)

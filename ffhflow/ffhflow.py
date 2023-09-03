@@ -62,8 +62,8 @@ class FFHFlow(pl.LightningModule):
         self.cfg = cfg
 
         # Create backbone feature extractor
-        self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        # self.backbone = BPSMLP()
+        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        self.backbone = BPSMLP()
 
         # # free param in backbone
         # for param in self.backbone.parameters():

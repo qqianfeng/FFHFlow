@@ -1,3 +1,5 @@
+NAME: prohmr_flow_with_transl_input
+
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
   GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
