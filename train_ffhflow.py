@@ -26,7 +26,7 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', 
 
 # Set up model
 # model = FFHFlow(cfg)
-model = FFHFlowNormal(cfg)
+model = FFHFlowPosEnc(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=

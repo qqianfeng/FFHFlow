@@ -43,11 +43,16 @@ class GraspFlowPosEnc(nn.Module):
         # samples = batch['rot_matrix']  # [batch_size,3,3]
 
         # input of positional encoded angles
-        samples = batch['angle_vector']  # [batch_size,3,3]
-        samples = self.pe.forward_localinn(samples)
+        angles = batch['angle_vector']  # [batch_size,3,3]
+        angles = self.pe.forward_localinn(angles)
 
-        samples = samples.reshape(batch_size, -1).to(feats.dtype)
+        angles = angles.reshape(batch_size, -1).to(feats.dtype)
+        transl = batch['transl']
+        transl = transl.reshape(batch_size, -1).to(feats.dtype)
+        samples = torch.cat([angles, transl],dim=1)
+
         feats = feats.reshape(batch_size, -1)
+        # grasp -> z
         log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
         z = z.reshape(batch_size, 1, -1)
@@ -81,12 +86,10 @@ class GraspFlowPosEnc(nn.Module):
         z = z.reshape(batch_size, num_samples, -1)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
-        # pred_pose = pred_params[:, :, :6]
-        # pred_pose_6d = pred_pose.clone()
-        # pred_pose = rot_matrix_from_ortho6d(pred_pose.reshape(batch_size * num_samples, -1))
-
+        pred_pose = pred_params[:, :, :60]
         # decode
-        pred_params = pred_params.reshape(batch_size,3,-1)
-        # pred_pose_transl = pred_params[:, :, 6:]
-        pred_angles = self.pe.backward(pred_params)
-        return log_prob, z, pred_angles, None
+        pred_pose = pred_pose.reshape(batch_size, 3, -1)
+        pred_angles = self.pe.backward(pred_pose)
+
+        pred_pose_transl = pred_params[:, :, 60:]
+        return log_prob, z, pred_angles, pred_pose_transl

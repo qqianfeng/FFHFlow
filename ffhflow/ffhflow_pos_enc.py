@@ -128,12 +128,13 @@ class FFHFlowPosEnc(pl.LightningModule):
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
+        # z -> grasp
         log_prob, _, pred_angles, pred_pose_transl = self.flow(conditioning_feats, num_samples)
 
         output = {}
         output['log_prod'] = log_prob
         output['pred_angles'] = pred_angles
-        # output['pred_pose_transl'] = pred_pose_transl
+        output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
 
         return output
@@ -150,24 +151,19 @@ class FFHFlowPosEnc(pl.LightningModule):
         """
 
         # 1. Reconstruction loss
-        num_samples = output['pred_angles'].shape[1]
         pred_angles = output['pred_angles'].view(-1,3)
-        # pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        batch_size = output['pred_angles'].shape[0]
+        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
         gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
 
         rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
-        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
         # TODO: add joint as loss
 
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
 
-        # # Add some noise to annotations at training time to prevent overfitting
-        # if train:
-        #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
-
+        # grasp -> z
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
@@ -177,16 +173,16 @@ class FFHFlowPosEnc(pl.LightningModule):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-                self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+                # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
             #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
+                    rot_loss=rot_loss.detach(),
+                    transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
-                    rot_loss=rot_loss.detach())
-                    # transl_loss=transl_loss.detach())
 
         output['losses'] = losses
 
