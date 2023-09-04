@@ -1,4 +1,4 @@
-NAME: prohmr_flow_with_transl_input
+NAME: prohmr_flow_with_transl_input_only_nll_loss
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
