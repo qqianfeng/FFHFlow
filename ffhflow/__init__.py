@@ -10,6 +10,7 @@ from .heads import GraspFlow
 from .utils import utils
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
+
 class Metaclass(pl.LightningModule):
     def __init__(self):
         super().__init__()
@@ -55,4 +56,8 @@ class Metaclass(pl.LightningModule):
         pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
 
         grasps = {'rot_matrix': pred_rot_matrix.cpu().data.numpy(), 'transl': pred_transl}
+        show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
+
+    def show_gt_grasps(self, pcd_path, batch: Dict, i: int):
+        grasps = {'rot_matrix': batch['rot_matrix'], 'transl': batch['transl']}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)

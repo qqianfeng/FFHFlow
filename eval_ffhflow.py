@@ -37,7 +37,7 @@ ffh_datamodule = FFHDataModule(cfg)
 # Setup PyTorch Lightning Trainer
 ckpt_path = args.ckpt_path
 
-model = FFHFlow.load_from_checkpoint(ckpt_path, cfg=cfg)
+model = FFHFlowNormal.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 val_loader = ffh_datamodule.val_dataloader()
@@ -46,4 +46,5 @@ val_loader = ffh_datamodule.val_dataloader()
 with torch.no_grad():
     for i, batch in enumerate(val_loader):
         out = model.sample(batch['bps_object'][0], num_samples=100)
-        model.show_grasps(batch['pcd_path'][0], out, i)
+        # model.show_grasps(batch['pcd_path'][0], out, i)
+        model.show_gt_grasps(batch['pcd_path'][0], batch, i)
