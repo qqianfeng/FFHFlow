@@ -25,8 +25,8 @@ cfg = get_config(args.model_cfg)
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
 
 # Set up model
-model = FFHFlowNormalPosEnc(cfg)
-# model = FFHFlowNormal(cfg)
+# model = FFHFlow(cfg)
+model = FFHFlowNormal(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
@@ -59,5 +59,7 @@ trainer.fit(model, datamodule=ffh_datamodule)
 
 # copy the config file to save_dir
 fname = os.path.join(args.root_dir, 'tensorboard', 'hparams.yaml')
-if not os.path.isfile(fname):
-    shutil.copy(args.model_cfg, fname)
+if os.path.isfile(fname):
+    os.remove(fname)
+
+shutil.copy(args.model_cfg, fname)

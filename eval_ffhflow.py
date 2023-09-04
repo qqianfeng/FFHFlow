@@ -15,19 +15,14 @@ from ffhflow.ffhflow_normal_pos_enc import FFHFlowNormalPosEnc
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 # parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
-parser.add_argument('--model_cfg', type=str, default='models/ffhflow_normal_flow_continue_train_complete/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='models/ffhflow_new_prohmr_flow_with_transl_input/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_normal_flow_continue_train_complete/epoch=12-step=154391.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_new_prohmr_flow_with_transl_input/epoch=16-step=199955.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
 # Set up cfg
 cfg = get_config(args.model_cfg)
-
-# copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'hparams.yaml')
-if not os.path.isfile(fname):
-    shutil.copy(args.model_cfg, fname)
 
 # Setup Tensorboard logger
 logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
@@ -36,17 +31,13 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', 
 # model = FFHFlowNormalPosEnc(cfg)
 # model = FFHFlowNormal(cfg)
 
-# Setup checkpoint saving
-checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, 'tensorboard'),
-                        every_n_epochs=1)
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
 ckpt_path = args.ckpt_path
 
-model = FFHFlowNormal.load_from_checkpoint(ckpt_path, cfg=cfg)
+model = FFHFlow.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 val_loader = ffh_datamodule.val_dataloader()
@@ -54,5 +45,5 @@ val_loader = ffh_datamodule.val_dataloader()
 # Go over the images in the dataset.
 with torch.no_grad():
     for i, batch in enumerate(val_loader):
-        out = model.sample(batch['bps_object'][0],num_samples=100)
-        model.show_grasps(batch, out)
+        out = model.sample(batch['bps_object'][0], num_samples=100)
+        model.show_grasps(batch['pcd_path'][0], out, i)
