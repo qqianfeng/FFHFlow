@@ -150,7 +150,7 @@ class FFHGeneratorDataset(data.Dataset):
 
         alpha, beta, gamma = transforms3d.euler.mat2euler(palm_rot_matrix)
 
-        # Normalize angles [-pi, pi], [-pi/2,pi/2], [-pi, pi]
+        # Normalize angles [-pi, pi], [-pi/2,pi/2], [-pi, pi] to [0,1]
         alpha = (alpha + np.pi) / 2 / np.pi
         beta = (beta + np.pi) / 2 / np.pi
         gamma = (gamma + np.pi) / 2 / np.pi

@@ -1,14 +1,18 @@
-import torch
-import numpy as np
-import pytorch_lightning as pl
 from typing import Any, Dict, Tuple
 
+import numpy as np
+import pytorch_lightning as pl
+import torch
+import transforms3d
 from yacs.config import CfgNode
 
-from .backbones import PointNetfeat, FFHGenerator, BPSMLP
+from ffhflow.utils.visualization import show_generated_grasp_distribution
+
+from . import Metaclass
+from .backbones import BPSMLP, FFHGenerator, PointNetfeat
 from .heads import GraspFlowPosEnc
 from .utils import utils
-from . import Metaclass
+
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -276,11 +280,31 @@ class FFHFlowPosEnc(Metaclass):
         self.flow.to('cuda')
 
         conditioning_feats = self.backbone(batch)
-        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
-        pred_pose_6d = pred_pose_rot.view(-1,6)
+        log_prob, _, pred_angles, pred_pose_transl = self.flow(conditioning_feats, num_samples)
+        pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
 
         output = {}
-        output['pred_pose_6d'] = pred_pose_6d
+        output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         return output
+
+    def show_grasps(self, pcd_path, samples: Dict, i: int):
+        """Visualization of grasps
+
+        Args:
+            pcd_path (str): _description_
+            samples (Dict): _description_
+            i (int): index of sample
+        """
+        num_samples = samples['pred_angles'].shape[0]
+        pred_rot_matrix = np.zeros((num_samples,3,3))
+        for idx in range(num_samples):
+            alpha, beta, gamma = samples['pred_angles'][idx].cpu().data.numpy()
+            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
+            pred_rot_matrix[idx] = mat
+
+        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
+
+        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
+        show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
