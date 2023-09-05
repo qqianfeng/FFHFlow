@@ -55,4 +55,4 @@ val_loader = ffh_datamodule.val_dataloader()
 with torch.no_grad():
     for i, batch in enumerate(val_loader):
         out = model.sample(batch['bps_object'][0],num_samples=100)
-        model.show_grasps(batch, out)
+        model.show_grasps(batch['pcd_path'][0], out)
