@@ -1,4 +1,4 @@
-NAME: prohmr_flow_with_transl_input
+NAME: prohmr_flow_with_transl_input_only_nll_loss
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
@@ -18,9 +18,7 @@ TRAIN:
   BATCH_SIZE: 64
   LOSS_REDUCTION: mean
   NUM_TRAIN_SAMPLES: 1
-  NUM_TEST_SAMPLES: 100
-  POSE_2D_NOISE_RATIO: 0.01
-  SMPL_PARAM_NOISE_RATIO: 0.005
+  NUM_TEST_SAMPLES: 1
   # from ffhnet
   BETA1: 0.9
   WEIGHT_DECAY: 0.0005

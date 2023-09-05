@@ -6,7 +6,8 @@ import torch.nn as nn
 from nflows.flows import ConditionalGlow
 from torch import Tensor
 from yacs.config import CfgNode
-
+import numpy as np
+from copy import deepcopy
 # from ffhflow.utils.utils import rot_matrix_from_ortho6d
 
 
@@ -56,8 +57,9 @@ class PositionalEncoding(nn.Module):
         for k in range(angle_vec.shape[1]):
             for i in torch.arange(int(d/2)):
                 denominator = torch.Tensor([2**i]).to(angle_vec.device)  # n^0=1 ,n^0.5
-                P[:, k, 2*i] = torch.sin(angle_vec[:,k] * denominator)
-                P[:, k, 2*i+1] = torch.cos(angle_vec[:,k] * denominator)
+                pi = torch.from_numpy(np.array([2*np.pi])).to(angle_vec.device)
+                P[:, k, 2*i] = torch.sin(angle_vec[:,k] * denominator * pi)
+                P[:, k, 2*i+1] = torch.cos(angle_vec[:,k] * denominator * pi)
 
         return P
 
@@ -70,10 +72,15 @@ class PositionalEncoding(nn.Module):
         Returns:
             Tensor: _description_
         """
+        # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
+        if P.dim() == 4:
+            P = P[0,:,:,:]
         batch_size = P.shape[0]
         angle_vec = torch.zeros([batch_size,3]).to(P.device)
+        pi = torch.from_numpy(np.array([2*np.pi])).to(angle_vec.device)
+
         for i in range(3):
-            angle_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1])
+            angle_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1]) / pi
 
         # # Test backward pass
         # angle_vec_test = torch.zeros([batch_size,3]).to(P.device)
@@ -83,6 +90,24 @@ class PositionalEncoding(nn.Module):
 
         return angle_vec
 
+    def backward2(self, P: Tensor) -> Tensor:
+        """_summary_
+
+        Args:
+            P (Tensor): [batch_size, 3, 4]
+
+        Returns:
+            Tensor: _description_
+        """
+        # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
+        if P.dim() == 4:
+            P = P[0,:,:,:]
+        batch_size = P.shape[0]
+        angle_vec = torch.zeros([batch_size,3]).to(P.device)
+        denominator = torch.Tensor([2**1]).to(P.device)
+        for i in range(3):
+            angle_vec[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) / denominator
+        return angle_vec
 
 class LocalInnFlow(nn.Module):
     """
@@ -155,6 +180,7 @@ class LocalInnFlow(nn.Module):
         # pred_pose_transl = pred_params[:, :, 6:]
         return log_prob, z, pred_pose_6d #, pred_pose_transl
 
+
 if __name__ == "__main__":
     pe = PositionalEncoding()
     angle_vector = torch.tensor([[-0.6154, -0.1396, -2.9588],
@@ -221,8 +247,23 @@ if __name__ == "__main__":
         [ 3.0073, -0.8204, -0.2505],
         [-0.1926,  0.6698,  1.0936],
         [-0.4912, -0.2851,  1.5580]], device='cuda:0')
-    angle_vector.max()
-    angle_vector.min()
-    encoded_angle = pe.forward(angle_vector)
+    angle_vector_origin = deepcopy(angle_vector)
+    angle_vector[:,0] = (angle_vector[:,0] + np.pi) / 2 / np.pi
+    angle_vector[:,1] = (angle_vector[:,1] + np.pi) / 2 / np.pi
+    angle_vector[:,2] = (angle_vector[:,2] + np.pi) / 2 / np.pi
+
+    encoded_angle = pe.forward_localinn(angle_vector)
     decoded_angle = pe.backward(encoded_angle)
-    print(torch.allclose(decoded_angle, angle_vector,atol=1e-09))
+    decoded_angle2 = pe.backward2(encoded_angle)
+
+    decoded_angle[:,0] = decoded_angle[:,0] * 2 * np.pi - np.pi
+    decoded_angle[:,1] = decoded_angle[:,1] * 2 * np.pi - np.pi
+    decoded_angle[:,2] = decoded_angle[:,2] * 2 * np.pi - np.pi
+
+
+    decoded_angle[decoded_angle<-np.pi] += 2*np.pi
+    # a = decoded_angle[:,1]
+    # a[a<-np.pi/2] += np.pi/2
+    # decoded_angle[:,1] = a
+    print(angle_vector_origin - decoded_angle)
+    print(torch.allclose(decoded_angle, angle_vector_origin, atol=1e-05))

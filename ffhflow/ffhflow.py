@@ -8,7 +8,7 @@ from yacs.config import CfgNode
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
 from .heads import GraspFlow
 from .utils import utils
-
+from . import Metaclass
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -49,7 +49,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlow(pl.LightningModule):
+class FFHFlow(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -128,10 +128,11 @@ class FFHFlow(pl.LightningModule):
         if not self.initialized:
             self.initialize(batch, conditioning_feats)
 
-        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
+        # This goes from z -> grasp
+        log_prob_z2grasp, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
 
         output = {}
-        output['log_prod'] = log_prob
+        output['log_prod'] = log_prob_z2grasp
         output['pred_pose_rot'] = pred_pose_rot
         output['pred_pose_transl'] = pred_pose_transl
         output['conditioning_feats'] = conditioning_feats
@@ -164,10 +165,7 @@ class FFHFlow(pl.LightningModule):
         # 2. Compute NLL loss
         conditioning_feats = output['conditioning_feats']
 
-        # # Add some noise to annotations at training time to prevent overfitting
-        # if train:
-        #     smpl_params = {k: v + self.cfg.TRAIN.SMPL_PARAM_NOISE_RATIO * torch.randn_like(v) for k, v in smpl_params.items()}
-
+        # This goes grasp -> z
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
@@ -177,12 +175,11 @@ class FFHFlow(pl.LightningModule):
         loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll +\
-               self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-               self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
-               self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
-            #    sum([loss_smpl_params_exp[k] * self.cfg.LOSS_WEIGHTS[(k+'_EXP').upper()] for k in loss_smpl_params_exp])+\
-            #    sum([loss_smpl_params_mode[k] * self.cfg.LOSS_WEIGHTS[(k+'_MODE').upper()] for k in loss_smpl_params_mode])
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
                     loss_pose_6d=loss_pose_6d.detach(),
