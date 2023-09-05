@@ -149,6 +149,12 @@ class FFHGeneratorDataset(data.Dataset):
             visualization.show_grasp_and_object(bps_path, palm_pose_centr, joint_conf)
 
         alpha, beta, gamma = transforms3d.euler.mat2euler(palm_rot_matrix)
+
+        # Normalize angles [-pi, pi], [-pi/2,pi/2], [-pi, pi]
+        alpha = (alpha + np.pi) / 2 / np.pi
+        beta = (beta + np.pi/2) / np.pi
+        gamma = (gamma + np.pi) / 2 / np.pi
+
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
                     'transl': palm_transl,\
