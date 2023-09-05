@@ -88,7 +88,7 @@ class GraspFlowPosEnc(nn.Module):
 
         pred_pose = pred_params[:, :, :60]
         # decode
-        pred_pose = pred_pose.reshape(batch_size, 3, -1)
+        pred_pose = pred_pose.reshape(batch_size, num_samples, 3, -1)
         pred_angles = self.pe.backward(pred_pose)
 
         pred_pose_transl = pred_params[:, :, 60:]

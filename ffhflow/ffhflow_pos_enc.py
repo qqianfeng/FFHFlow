@@ -8,7 +8,7 @@ from yacs.config import CfgNode
 from .backbones import PointNetfeat, FFHGenerator, BPSMLP
 from .heads import GraspFlowPosEnc
 from .utils import utils
-
+from . import Metaclass
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -49,7 +49,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlowPosEnc(pl.LightningModule):
+class FFHFlowPosEnc(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -257,3 +257,30 @@ class FFHFlowPosEnc(pl.LightningModule):
 
         for loss_name, val in losses.items():
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
+
+    def sample(self, bps, num_samples):
+        """ generate number of grasp samples
+
+        Args:
+            bps (torch.Tensor): one bps object
+            num_samples (int): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        bps = torch.tile(bps, (1,1))
+        # move data to cuda
+        bps_tensor = torch.tensor(bps).to('cuda')
+        batch = {'bps_object': bps_tensor}
+        self.backbone.to('cuda')
+        self.flow.to('cuda')
+
+        conditioning_feats = self.backbone(batch)
+        log_prob, _, pred_pose_rot, pred_pose_transl = self.flow(conditioning_feats, num_samples)
+        pred_pose_6d = pred_pose_rot.view(-1,6)
+        pred_pose_transl = pred_pose_transl.view(-1,3)
+
+        output = {}
+        output['pred_pose_6d'] = pred_pose_6d
+        output['pred_pose_transl'] = pred_pose_transl
+        return output
