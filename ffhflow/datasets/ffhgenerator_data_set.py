@@ -152,7 +152,7 @@ class FFHGeneratorDataset(data.Dataset):
 
         # Normalize angles [-pi, pi], [-pi/2,pi/2], [-pi, pi]
         alpha = (alpha + np.pi) / 2 / np.pi
-        beta = (beta + np.pi/2) / np.pi
+        beta = (beta + np.pi) / 2 / np.pi
         gamma = (gamma + np.pi) / 2 / np.pi
 
         data_out = {'rot_matrix': palm_rot_matrix,\
