@@ -295,6 +295,32 @@ class FFHFlowPosEnc(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
         return output
 
+    def filter_grasps(self, samples: Dict, thresh=0.: double):
+
+        sorted_score, indices = samples['log_prod'].sort(descending=True)
+        indices = indices[sorted_score > thresh]
+        sorted_score = sorted_score[sorted_score > thresh]
+
+        filt_grasps = {}
+
+        for k, v in samples.items():
+            index = indices.clone()
+            dim = 0
+
+            # Dynamically adjust dimensions for sorting
+            while len(v.shape) > len(index.shape):
+                dim += 1
+                index = index[..., None]
+                index = torch.cat(v.shape[dim] * (index, ), dim)
+
+            # Sort grasps
+            filt_grasps[k] = torch.gather(input=v, dim=0, index=index)
+
+        # Cast to python (if required)
+        if return_arr:
+            filt_grasps = {k: v.cpu().detach().numpy() for k, v in filt_grasps.items()}
+
+
     def show_grasps(self, pcd_path, samples: Dict, i: int):
         """Visualization of grasps
 
