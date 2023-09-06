@@ -45,7 +45,7 @@ MODEL:
     LATENT_DIM: 5
 
   FLOW:
-    DIM: 63 # input dims
+    DIM: 78 # input dims
     NUM_LAYERS: 4 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 512 # features dim from backbone
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow

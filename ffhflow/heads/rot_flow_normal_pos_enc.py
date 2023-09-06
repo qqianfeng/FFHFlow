@@ -101,6 +101,7 @@ class GraspFlowNormalPosEnc(nn.Module):
 
             transl = batch['transl'].reshape(batch_size, -1).to(feats.dtype)
             samples = torch.cat([angles, transl],dim=1)
+            # grasp -> z
             log_prob, z = self.flow.log_prob(samples, feats)
 
             return log_prob, z#, pred_pose_6d, pred_pose_transl
