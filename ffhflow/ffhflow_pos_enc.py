@@ -290,6 +290,7 @@ class FFHFlowPosEnc(Metaclass):
         pred_joint_conf = pred_joint_conf.view(-1, 15)
 
         output = {}
+        output['log_prob'] = log_prob
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
@@ -332,7 +333,9 @@ class FFHFlowPosEnc(Metaclass):
         num_samples = samples['pred_angles'].shape[0]
         pred_rot_matrix = np.zeros((num_samples,3,3))
         for idx in range(num_samples):
-            alpha, beta, gamma = samples['pred_angles'][idx].cpu().data.numpy()
+            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            pred_angles = pred_angles * 2 * np.pi - np.pi
+            alpha, beta, gamma = pred_angles
             mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
             pred_rot_matrix[idx] = mat
 
