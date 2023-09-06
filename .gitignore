@@ -1,3 +1,6 @@
+build/
+dist/
 checkpoints/
 .vscode
 *.pyc
+*.egg-info
