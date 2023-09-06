@@ -296,7 +296,7 @@ class FFHFlowPosEnc(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
         return output
 
-    def filter_grasps(self, samples: Dict, thresh=0.: double):
+    def filter_grasps(self, samples: Dict, thresh: float = 0.):
 
         sorted_score, indices = samples['log_prod'].sort(descending=True)
         indices = indices[sorted_score > thresh]
