@@ -28,9 +28,12 @@ class GraspFlowPosEncNegGrasp(nn.Module):
 
     def modify_log_prob_with_label(self, batch: Dict, log_prob: torch.Tensor):
         flag = [-1 if i == 'negative' else 1 for i in batch['label']]
-        flag = torch.from_numpy(np.array(flag)).to(log_prob.device)
-        log_prob = torch.mul(log_prob, flag)
-        return log_prob
+        log_prob_pos = log_prob[flag=='1']
+        log_prob_neg = log_prob[flag=='-1']
+
+        # flag = torch.from_numpy(np.array(flag)).to(log_prob.device)
+        # log_prob = torch.mul(log_prob, flag)
+        return log_prob_pos, log_prob_neg
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
@@ -62,10 +65,11 @@ class GraspFlowPosEncNegGrasp(nn.Module):
         # grasp -> z
         log_prob, z = self.flow.log_prob(samples, feats)
         log_prob = log_prob.reshape(batch_size, 1)
-        log_prob = self.modify_log_prob_with_label(batch, log_prob)
+
+        log_prob_pos, log_prob_neg = self.modify_log_prob_with_label(batch, log_prob)
 
         z = z.reshape(batch_size, 1, -1)
-        return log_prob, z
+        return [log_prob_pos, log_prob_neg], z
 
     def forward(self, feats: torch.Tensor, num_samples: Optional[int] = None, z: Optional[torch.Tensor] = None) -> Tuple:
         """
