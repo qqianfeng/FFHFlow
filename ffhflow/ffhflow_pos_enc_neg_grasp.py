@@ -10,7 +10,7 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
 from .backbones import BPSMLP, FFHGenerator, PointNetfeat
-from .heads import GraspFlowPosEnc
+from .heads import GraspFlowPosEncNegGrasp
 from .utils import utils
 
 
@@ -53,7 +53,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlowPosEnc(Metaclass):
+class FFHFlowPosEncNegGrasp(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -73,7 +73,7 @@ class FFHFlowPosEnc(Metaclass):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlowPosEnc(cfg)
+        self.flow = GraspFlowPosEncNegGrasp(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
@@ -173,7 +173,9 @@ class FFHFlowPosEnc(Metaclass):
 
         # grasp -> z
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
-        loss_nll = -log_prob.mean()
+        log_prob_pos, log_prob_neg = log_prob
+        loss_nll_pos = -log_prob_pos.mean()
+        loss_nll_neg = log_prob_neg.mean()
 
         # 3: Compute orthonormal loss on 6D representations
         # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
@@ -181,13 +183,15 @@ class FFHFlowPosEnc(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
+                self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
                 # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
             #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
         losses = dict(loss=loss.detach(),
-                    loss_nll=loss_nll.detach(),
+                    loss_nll_pos=loss_nll_pos.detach(),
+                    loss_nll_neg=loss_nll_neg.detach(),
                     rot_loss=rot_loss.detach(),
                     transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
