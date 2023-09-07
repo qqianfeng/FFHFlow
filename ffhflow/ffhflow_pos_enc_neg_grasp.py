@@ -10,7 +10,7 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
 from .backbones import BPSMLP, FFHGenerator, PointNetfeat
-from .heads import GraspFlowPosEnc
+from .heads import GraspFlowPosEncNegGrasp
 from .utils import utils
 
 
@@ -53,7 +53,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlowPosEnc(Metaclass):
+class FFHFlowPosEncNegGrasp(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -73,7 +73,7 @@ class FFHFlowPosEnc(Metaclass):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlowPosEnc(cfg)
+        self.flow = GraspFlowPosEncNegGrasp(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
