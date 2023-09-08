@@ -285,6 +285,7 @@ class FFHFlowPosEnc(Metaclass):
 
         conditioning_feats = self.backbone(batch)
         log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
         pred_joint_conf = pred_joint_conf.view(-1, 15)
@@ -351,7 +352,7 @@ class FFHFlowPosEnc(Metaclass):
 
         pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
 
-        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
+        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl} #, 'joint_conf': samples['joint_conf'].cpu().data.numpy()}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
 
         if save:
@@ -363,4 +364,4 @@ class FFHFlowPosEnc(Metaclass):
             centr_T_palm[:3,-1] = pred_transl[i]
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
-            self.save_to_path(filtered_out['joint_conf'][i], 'joint_conf.npy', base_path)
+            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)

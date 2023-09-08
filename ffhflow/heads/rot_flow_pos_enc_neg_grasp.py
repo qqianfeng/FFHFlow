@@ -27,9 +27,9 @@ class GraspFlowPosEncNegGrasp(nn.Module):
         self.pe = PositionalEncoding()
 
     def modify_log_prob_with_label(self, batch: Dict, log_prob: torch.Tensor):
-        flag = [-1 if i == 'negative' else 1 for i in batch['label']]
-        log_prob_pos = log_prob[flag=='1']
-        log_prob_neg = log_prob[flag=='-1']
+        flag = np.array([-1 if i == 'negative' else 1 for i in batch['label']])
+        log_prob_pos = log_prob[flag==1]
+        log_prob_neg = log_prob[flag==-1]
 
         # flag = torch.from_numpy(np.array(flag)).to(log_prob.device)
         # log_prob = torch.mul(log_prob, flag)
