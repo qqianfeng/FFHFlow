@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 import transforms3d
 from yacs.config import CfgNode
-
+import os
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
@@ -278,14 +278,13 @@ class FFHFlowPosEnc(Metaclass):
         """
         bps = torch.tile(bps, (1,1))
         # move data to cuda
-        bps = bps.to('cuda')
-        batch = {'bps_object': bps}
+        bps_tensor = torch.tensor(bps).to('cuda')
+        batch = {'bps_object': bps_tensor}
         self.backbone.to('cuda')
         self.flow.to('cuda')
 
         conditioning_feats = self.backbone(batch)
         log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
-        log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
         pred_joint_conf = pred_joint_conf.view(-1, 15)
@@ -330,7 +329,10 @@ class FFHFlowPosEnc(Metaclass):
 
         return filt_grasps
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int):
+    def save_to_path(self, np_arr, name, base_path):
+        np.save(os.path.join(base_path,name), np_arr)
+
+    def show_grasps(self, pcd_path, samples: Dict, i: int, base_path: str = '', save: bool = False):
         """Visualization of grasps
 
         Args:
@@ -339,7 +341,7 @@ class FFHFlowPosEnc(Metaclass):
             i (int): index of sample
         """
         num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_rot_matrix = np.zeros((num_samples,3,3))
         for idx in range(num_samples):
             pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
             pred_angles = pred_angles * 2 * np.pi - np.pi
@@ -351,3 +353,14 @@ class FFHFlowPosEnc(Metaclass):
 
         grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
+
+        if save:
+            i = 0
+            self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
+
+            centr_T_palm = np.zeros((4,4))
+            centr_T_palm[:3,:3] = grasps['rot_matrix'][i]
+            centr_T_palm[:3,-1] = pred_transl[i]
+            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
+
+            self.save_to_path(filtered_out['joint_conf'][i], 'joint_conf.npy', base_path)

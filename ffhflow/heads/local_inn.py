@@ -73,8 +73,8 @@ class PositionalEncoding(nn.Module):
             Tensor: _description_
         """
         # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
-        if P.dim() == 4:
-            P = P[0,:,:,:]
+        P = torch.squeeze(P)
+        assert P.dim() == 3
         batch_size = P.shape[0]
         angle_vec = torch.zeros([batch_size,3]).to(P.device)
         pi = torch.from_numpy(np.array([2*np.pi])).to(angle_vec.device)
