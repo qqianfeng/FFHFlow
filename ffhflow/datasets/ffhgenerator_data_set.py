@@ -472,6 +472,13 @@ class FFHGeneratorPosNegDataset(FFHGeneratorDataset):
         beta = (beta + np.pi) / 2 / np.pi
         gamma = (gamma + np.pi) / 2 / np.pi
 
+        # Normalize transl
+
+        # [ 0.20864879992399918, -0.21115427946708953]
+        # [ 0.13591848442440144, -0.3150945039775345 ]
+        # [ 0.2628828995958964, -0.1773658852579449]
+        # [ 0.2628828995958964, -0.3150945039775345]
+
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
                     'transl': palm_transl,\
@@ -498,16 +505,16 @@ if __name__ == '__main__':
     cfg = get_config(path)
     gds = FFHGeneratorDataset(cfg)
 
-    while True:
-        i = np.random.randint(0, gds.__len__())
-        gds.__getitem__(i)
+    # while True:
+    #     i = np.random.randint(0, gds.__len__())
+    #     gds.__getitem__(i)
 
     # save angle vector npy
-    # print(len(gds))
-    # angle_vectors = np.zeros((len(gds),3))
-    # for i in range(len(gds)):
-    #     # i = np.random.randint(0, gds.__len__())
-    #     data = gds.__getitem__(i)
-    #     angle_vectors[i] = data['angle_vector']
+    print(len(gds))
+    transl_vectors = np.zeros((len(gds),3))
+    for i in range(len(gds)):
+        # i = np.random.randint(0, gds.__len__())
+        data = gds.__getitem__(i)
+        transl_vectors[i] = data['transl']
 
-    # np.save('angle_vector.npy',angle_vectors)
+    np.save('transl_vectors.npy',transl_vectors)
