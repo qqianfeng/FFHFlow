@@ -1,12 +1,6 @@
 import torch
-import numpy as np
 import pytorch_lightning as pl
-from typing import Any, Dict, Tuple
 
-from yacs.config import CfgNode
-
-from .backbones import PointNetfeat, FFHGenerator, BPSMLP
-from .heads import GraspFlow
 from .utils import utils
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
@@ -42,7 +36,7 @@ class Metaclass(pl.LightningModule):
         output['pred_pose_transl'] = pred_pose_transl
         return output
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int):
+    def show_grasps(self, pcd_path, samples, i: int):
         """Visualization of grasps
 
         Args:
@@ -58,6 +52,6 @@ class Metaclass(pl.LightningModule):
         grasps = {'rot_matrix': pred_rot_matrix.cpu().data.numpy(), 'transl': pred_transl}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
 
-    def show_gt_grasps(self, pcd_path, batch: Dict, i: int):
+    def show_gt_grasps(self, pcd_path, batch, i: int):
         grasps = {'rot_matrix': batch['rot_matrix'], 'transl': batch['transl']}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
