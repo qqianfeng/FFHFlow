@@ -63,6 +63,27 @@ class PositionalEncoding(nn.Module):
 
         return P
 
+    def forward_transl(self, transl_vec, d=20) -> Tensor:
+        """_summary_
+
+        Args:
+            transl_vec (_type_): [batch_size, 3]
+            n (int, optional): _description_. Defaults to 10000.
+            d (int, optional): _description_. Defaults to 4.
+
+        Returns:
+            Tensor: _description_
+        """
+        P = torch.zeros((transl_vec.shape[0], transl_vec.shape[1], d)).to(transl_vec.device)
+        for k in range(transl_vec.shape[1]):
+            for i in torch.arange(int(d/2)):
+                denominator = torch.Tensor([2**i]).to(transl_vec.device)  # n^0=1 ,n^0.5
+                pi = torch.from_numpy(np.array([2*np.pi])).to(transl_vec.device)
+                P[:, k, 2*i] = torch.sin(transl_vec[:,k] * denominator * pi)
+                P[:, k, 2*i+1] = torch.cos(transl_vec[:,k] * denominator * pi)
+
+        return P
+
     def backward(self, P: Tensor) -> Tensor:
         """_summary_
 
@@ -89,6 +110,33 @@ class PositionalEncoding(nn.Module):
         # print(torch.allclose(angle_vec, angle_vec_test, atol=1e-09))
 
         return angle_vec
+
+    def backward_transl(self, P: Tensor) -> Tensor:
+        """_summary_
+
+        Args:
+            P (Tensor): [batch_size, 3, 4]
+
+        Returns:
+            Tensor: _description_
+        """
+        # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
+        P = torch.squeeze(P)
+        assert P.dim() == 3
+        batch_size = P.shape[0]
+        transl_vec = torch.zeros([batch_size,3]).to(P.device)
+        pi = torch.from_numpy(np.array([2*np.pi])).to(transl_vec.device)
+
+        for i in range(3):
+            transl_vec[:,i] = torch.atan2(P[:,i,0], P[:,i,1]) / pi
+
+        # # Test backward pass
+        # transl_vec_test = torch.zeros([batch_size,3]).to(P.device)
+        # for i in range(3):
+        #     transl_vec_test[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) * torch.pow(torch.Tensor([10]).to(transl_vec.device), torch.Tensor([0.5]).to(transl_vec.device))
+        # print(torch.allclose(transl_vec, transl_vec_test, atol=1e-09))
+
+        return transl_vec
 
     def backward2(self, P: Tensor) -> Tensor:
         """_summary_
@@ -247,23 +295,111 @@ if __name__ == "__main__":
         [ 3.0073, -0.8204, -0.2505],
         [-0.1926,  0.6698,  1.0936],
         [-0.4912, -0.2851,  1.5580]], device='cuda:0')
-    angle_vector_origin = deepcopy(angle_vector)
-    angle_vector[:,0] = (angle_vector[:,0] + np.pi) / 2 / np.pi
-    angle_vector[:,1] = (angle_vector[:,1] + np.pi) / 2 / np.pi
-    angle_vector[:,2] = (angle_vector[:,2] + np.pi) / 2 / np.pi
+    # angle_vector_origin = deepcopy(angle_vector)
+    # angle_vector[:,0] = (angle_vector[:,0] + np.pi) / 2 / np.pi
+    # angle_vector[:,1] = (angle_vector[:,1] + np.pi) / 2 / np.pi
+    # angle_vector[:,2] = (angle_vector[:,2] + np.pi) / 2 / np.pi
 
-    encoded_angle = pe.forward_localinn(angle_vector)
-    decoded_angle = pe.backward(encoded_angle)
-    decoded_angle2 = pe.backward2(encoded_angle)
+    # encoded_angle = pe.forward_localinn(angle_vector)
+    # decoded_angle = pe.backward(encoded_angle)
+    # decoded_angle2 = pe.backward2(encoded_angle)
 
-    decoded_angle[:,0] = decoded_angle[:,0] * 2 * np.pi - np.pi
-    decoded_angle[:,1] = decoded_angle[:,1] * 2 * np.pi - np.pi
-    decoded_angle[:,2] = decoded_angle[:,2] * 2 * np.pi - np.pi
+    # decoded_angle[:,0] = decoded_angle[:,0] * 2 * np.pi - np.pi
+    # decoded_angle[:,1] = decoded_angle[:,1] * 2 * np.pi - np.pi
+    # decoded_angle[:,2] = decoded_angle[:,2] * 2 * np.pi - np.pi
 
 
-    decoded_angle[decoded_angle<-np.pi] += 2*np.pi
+    # decoded_angle[decoded_angle<-np.pi] += 2*np.pi
+    # # a = decoded_angle[:,1]
+    # # a[a<-np.pi/2] += np.pi/2
+    # # decoded_angle[:,1] = a
+    # print(angle_vector_origin - decoded_angle)
+    # print(torch.allclose(decoded_angle, angle_vector_origin, atol=1e-05))
+
+
+
+    transl_vector = torch.tensor([[-0.0593, -0.1598,  0.1257],
+        [-0.0414, -0.1202, -0.0064],
+        [ 0.1284, -0.0347,  0.0137],
+        [ 0.0242, -0.1697,  0.0112],
+        [-0.0213, -0.1556, -0.0123],
+        [ 0.0150,  0.0248, -0.1444],
+        [-0.0775, -0.1016,  0.0624],
+        [-0.0672, -0.1618,  0.0168],
+        [ 0.0531, -0.1510, -0.0088],
+        [ 0.0756, -0.0943,  0.2091],
+        [-0.0385, -0.1291, -0.0102],
+        [-0.1179, -0.0546,  0.0336],
+        [ 0.0538,  0.0035, -0.0660],
+        [ 0.1627,  0.0158,  0.0032],
+        [ 0.1127, -0.1102,  0.0348],
+        [-0.1301, -0.0810, -0.0622],
+        [ 0.1379,  0.0309,  0.0068],
+        [-0.0136, -0.1331, -0.0283],
+        [-0.0047, -0.2068, -0.0542],
+        [ 0.0988, -0.0435,  0.1191],
+        [-0.0333, -0.1529, -0.0317],
+        [-0.0123, -0.1299, -0.0237],
+        [-0.0104, -0.0575,  0.1561],
+        [-0.1040, -0.0649,  0.0504],
+        [-0.0331, -0.1111, -0.0241],
+        [ 0.0381, -0.1470, -0.0417],
+        [ 0.0174, -0.1722,  0.0136],
+        [-0.0215, -0.0368, -0.1013],
+        [-0.0390, -0.1727, -0.0006],
+        [ 0.0971, -0.0981,  0.0902],
+        [-0.0374, -0.1589, -0.0476],
+        [-0.0162, -0.1662, -0.0148],
+        [-0.0884, -0.0222, -0.1012],
+        [-0.1155, -0.0527,  0.0666],
+        [-0.0886, -0.0789,  0.1813],
+        [-0.1064, -0.0397, -0.0282],
+        [ 0.0225, -0.1687, -0.0297],
+        [ 0.0113, -0.1460, -0.0157],
+        [-0.0993, -0.0388,  0.0960],
+        [-0.0345, -0.1369, -0.0106],
+        [-0.0140, -0.1048, -0.0189],
+        [ 0.1258, -0.0467,  0.0741],
+        [-0.0781, -0.1058,  0.0243],
+        [ 0.0078, -0.0720,  0.1023],
+        [ 0.0457, -0.1165, -0.0381],
+        [ 0.0732, -0.0902, -0.0118],
+        [ 0.0411, -0.1215, -0.0363],
+        [-0.0050, -0.1212, -0.0268],
+        [-0.0084, -0.1569, -0.0659],
+        [ 0.0217, -0.0691,  0.1240],
+        [ 0.0522,  0.0235, -0.1106],
+        [ 0.1348, -0.0142, -0.0231],
+        [ 0.0081, -0.1791, -0.0047],
+        [ 0.0688, -0.0401, -0.0845],
+        [ 0.0515, -0.1131, -0.0853],
+        [ 0.1156, -0.0418,  0.0735],
+        [ 0.0581, -0.0722,  0.1499],
+        [ 0.0642, -0.1585, -0.0407],
+        [ 0.0208, -0.2308,  0.0191],
+        [ 0.0266, -0.1803, -0.0285],
+        [-0.0941, -0.0607,  0.0600],
+        [-0.0251, -0.0319, -0.0668],
+        [ 0.0087, -0.1553,  0.0297],
+        [-0.0166, -0.1582, -0.0058]], device='cuda:0')
+
+    transl_vector_origin = deepcopy(transl_vector)
+
+    palm_transl_min = -0.3150945039775345
+    palm_transl_max = 0.2628828995958964
+    value_range = palm_transl_max - palm_transl_min
+    print(value_range)
+    transl_vector = (transl_vector + palm_transl_min) / (palm_transl_max - palm_transl_min)
+
+    encoded_angle = pe.forward_transl(transl_vector)
+    decoded_angle = pe.backward_transl(encoded_angle)
+
+    decoded_angle = decoded_angle * (palm_transl_max - palm_transl_min) - palm_transl_min
+
+    decoded_angle[decoded_angle < -value_range / 2] += value_range
+    decoded_angle[decoded_angle > value_range / 2] -= value_range
     # a = decoded_angle[:,1]
     # a[a<-np.pi/2] += np.pi/2
     # decoded_angle[:,1] = a
-    print(angle_vector_origin - decoded_angle)
-    print(torch.allclose(decoded_angle, angle_vector_origin, atol=1e-05))
+    print(transl_vector_origin, decoded_angle)
+    print(torch.allclose(decoded_angle, transl_vector_origin, atol=1e-05))

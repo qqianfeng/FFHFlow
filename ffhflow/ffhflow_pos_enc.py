@@ -333,6 +333,32 @@ class FFHFlowPosEnc(Metaclass):
     def save_to_path(self, np_arr, name, base_path):
         np.save(os.path.join(base_path,name), np_arr)
 
+    def convert_output_to_grasp_mat(self, samples):
+        num_samples = samples['pred_angles'].shape[0]
+        pred_rot_matrix = np.zeros((num_samples,3,3))
+        for idx in range(num_samples):
+            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            # rescale rotation prediction back
+            pred_angles = pred_angles * 2 * np.pi - np.pi
+            pred_angles[pred_angles < -np.pi] += 2 * np.pi
+
+            alpha, beta, gamma = pred_angles
+            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
+            pred_rot_matrix[idx] = mat
+
+            # rescale transl prediction back
+
+            palm_transl_min = -0.3150945039775345
+            palm_transl_max = 0.2628828995958964
+            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
+            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) - palm_transl_min
+
+            pred_transl[pred_transl < -value_range / 2] += value_range
+            pred_transl[pred_transl > value_range / 2] -= value_range
+
+        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
+        return grasps
+
     def show_grasps(self, pcd_path, samples: Dict, i: int, base_path: str = '', save: bool = False):
         """Visualization of grasps
 
@@ -341,18 +367,7 @@ class FFHFlowPosEnc(Metaclass):
             samples (Dict): _description_
             i (int): index of sample
         """
-        num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples,3,3))
-        for idx in range(num_samples):
-            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
-            pred_angles = pred_angles * 2 * np.pi - np.pi
-            alpha, beta, gamma = pred_angles
-            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
-            pred_rot_matrix[idx] = mat
-
-        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
-
-        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl} #, 'joint_conf': samples['joint_conf'].cpu().data.numpy()}
+        grasps = self.convert_output_to_grasp_mat(samples)
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
 
         if save:

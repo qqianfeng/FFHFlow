@@ -155,6 +155,16 @@ class FFHGeneratorDataset(data.Dataset):
         beta = (beta + np.pi) / 2 / np.pi
         gamma = (gamma + np.pi) / 2 / np.pi
 
+        # Normalize transl
+        # [ 0.20864879992399918, -0.21115427946708953]
+        # [ 0.13591848442440144, -0.3150945039775345 ]
+        # [ 0.2628828995958964, -0.1773658852579449]
+        # [ 0.2628828995958964, -0.3150945039775345]
+        palm_transl_min = -0.3150945039775345
+        palm_transl_max = 0.2628828995958964
+
+        palm_transl = (palm_transl + palm_transl_min) / (palm_transl_max - palm_transl_min)
+
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
                     'transl': palm_transl,\
@@ -473,11 +483,14 @@ class FFHGeneratorPosNegDataset(FFHGeneratorDataset):
         gamma = (gamma + np.pi) / 2 / np.pi
 
         # Normalize transl
-
         # [ 0.20864879992399918, -0.21115427946708953]
         # [ 0.13591848442440144, -0.3150945039775345 ]
         # [ 0.2628828995958964, -0.1773658852579449]
         # [ 0.2628828995958964, -0.3150945039775345]
+        palm_transl_min = -0.3150945039775345
+        palm_transl_max = 0.2628828995958964
+
+        palm_transl = (palm_transl + palm_transl_min) / (palm_transl_max - palm_transl_min)
 
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
