@@ -389,12 +389,12 @@ if __name__ == "__main__":
     palm_transl_max = 0.2628828995958964
     value_range = palm_transl_max - palm_transl_min
     print(value_range)
-    transl_vector = (transl_vector + palm_transl_min) / (palm_transl_max - palm_transl_min)
+    transl_vector = (transl_vector - palm_transl_min) / (palm_transl_max - palm_transl_min)
 
     encoded_angle = pe.forward_transl(transl_vector)
     decoded_angle = pe.backward_transl(encoded_angle)
 
-    decoded_angle = decoded_angle * (palm_transl_max - palm_transl_min) - palm_transl_min
+    decoded_angle = decoded_angle * (palm_transl_max - palm_transl_min) + palm_transl_min
 
     decoded_angle[decoded_angle < -value_range / 2] += value_range
     decoded_angle[decoded_angle > value_range / 2] -= value_range

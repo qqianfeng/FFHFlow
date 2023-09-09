@@ -163,7 +163,7 @@ class FFHGeneratorDataset(data.Dataset):
         palm_transl_min = -0.3150945039775345
         palm_transl_max = 0.2628828995958964
 
-        palm_transl = (palm_transl + palm_transl_min) / (palm_transl_max - palm_transl_min)
+        palm_transl = (palm_transl - palm_transl_min) / (palm_transl_max - palm_transl_min)
 
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
@@ -490,7 +490,7 @@ class FFHGeneratorPosNegDataset(FFHGeneratorDataset):
         palm_transl_min = -0.3150945039775345
         palm_transl_max = 0.2628828995958964
 
-        palm_transl = (palm_transl + palm_transl_min) / (palm_transl_max - palm_transl_min)
+        palm_transl = (palm_transl - palm_transl_min) / (palm_transl_max - palm_transl_min)
 
         data_out = {'rot_matrix': palm_rot_matrix,\
                     'angle_vector': np.array([alpha, beta, gamma]),\
