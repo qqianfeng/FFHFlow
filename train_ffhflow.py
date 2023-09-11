@@ -12,6 +12,7 @@ from ffhflow.ffhflow_normal import FFHFlowNormal
 from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
 from ffhflow.ffhflow_normal_pos_enc import FFHFlowNormalPosEnc
 from ffhflow.ffhflow_pos_enc_neg_grasp import FFHFlowPosEncNegGrasp
+from ffhflow.ffhflow_pos_enc_with_transl import FFHFlowPosEncWithTransl
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
@@ -27,7 +28,7 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', 
 
 # Set up model
 # model = FFHFlow(cfg)
-model = FFHFlowPosEncNegGrasp(cfg)
+model = FFHFlowPosEncWithTransl(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=

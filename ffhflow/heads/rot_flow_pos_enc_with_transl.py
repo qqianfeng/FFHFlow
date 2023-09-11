@@ -18,7 +18,7 @@ class GraspFlowPosEncWithTransl(nn.Module):
         Args:
             cfg (CfgNode): Model config as yacs CfgNode.
         """
-        super(GraspFlowPosEnc, self).__init__()
+        super().__init__()
         self.cfg = cfg
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
@@ -42,11 +42,11 @@ class GraspFlowPosEncWithTransl(nn.Module):
         # input of positional encoded angles
         angles = batch['angle_vector']  # [batch_size,3,3]
         angles = self.pe.forward_localinn(angles)
-
         angles = angles.reshape(batch_size, -1).to(feats.dtype)
+
+        transl = batch['transl']
         transl = self.pe.forward_transl(transl)
         transl = transl.reshape(batch_size, -1).to(feats.dtype)
-        transl = batch['transl']
 
         joint_conf = batch['joint_conf']
 
