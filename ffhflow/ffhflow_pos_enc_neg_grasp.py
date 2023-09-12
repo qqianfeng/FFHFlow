@@ -301,7 +301,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
         return output
 
-    def filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
+    def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
 
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc

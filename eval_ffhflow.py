@@ -9,9 +9,9 @@ from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
 
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='models/ffhflow_bpsmlp_normal_flow_pos_enc_localinn_data_norm/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='models/ffhflow_bpsmlp_normal_flow_pos_enc_localinn_data_norm_with_jointconf/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_bpsmlp_normal_flow_pos_enc_localinn_data_norm/epoch=16-step=199955.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_bpsmlp_normal_flow_pos_enc_localinn_data_norm_with_jointconf/epoch=8-step=199955.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -35,8 +35,8 @@ with torch.no_grad():
     for i, batch in enumerate(val_loader):
         out = model.sample(batch['bps_object'][0], num_samples=100)
         # model.show_grasps(batch['pcd_path'][0], out, i)
-        # filtered_out = model.filter_grasps(out, perc=0.5)
+        # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
-        filtered_out = model.filter_grasps(out, perc=0.1, return_arr=True)
+        filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=True)
         model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=True)
         # model.show_gt_grasps(batch['pcd_path'][0], batch, i)

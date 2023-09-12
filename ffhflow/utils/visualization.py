@@ -386,10 +386,10 @@ def show_generated_grasp_distribution(pcd_path,
         # ctr.convert_from_pinhole_camera_parameters(param)
         # vis.get_render_option().load_from_json(os.path.join(BASE_PATH,"FFHNet/config/render_opt.json"))
         vis.run()
-
-        key = input("Save image?: ")
-        if key == 'y':
-            vis.capture_screen_image("/home/yb/Pictures/ffhflow/{}.png".format(save_ix))
+        if save_ix != -1:
+            key = input("Save image?: ")
+            if key == 'y':
+                vis.capture_screen_image("/home/yb/Pictures/ffhflow/{}.png".format(save_ix))
 
         vis.destroy_window()
         # vis.get_render_option().save_to_json("/home/vm/hand_ws/src/FFHNet/render_opt.json")
