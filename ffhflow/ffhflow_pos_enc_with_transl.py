@@ -334,38 +334,14 @@ class FFHFlowPosEncWithTransl(Metaclass):
     def save_to_path(self, np_arr, name, base_path):
         np.save(os.path.join(base_path,name), np_arr)
 
-    def convert_output_to_grasp_mat(self, samples):
-        num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples,3,3))
-        for idx in range(num_samples):
-            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
-            # rescale rotation prediction back
-            pred_angles = pred_angles * 2 * np.pi - np.pi
-            pred_angles[pred_angles < -np.pi] += 2 * np.pi
-
-            alpha, beta, gamma = pred_angles
-            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
-            pred_rot_matrix[idx] = mat
-
-            # rescale transl prediction back
-
-            palm_transl_min = -0.3150945039775345
-            palm_transl_max = 0.2628828995958964
-            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
-            value_range = palm_transl_max - palm_transl_min
-            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
-
-            pred_transl[pred_transl < -value_range / 2] += value_range
-            pred_transl[pred_transl > value_range / 2] -= value_range
-
-        grasps = {'rot_matrix': pred_rot_matrix, 'pred_pose_transl': pred_transl}
-        return grasps
-
-    def convert_output_to_grasp_mat_tensor(self, samples):
-        """Needed for the real-world experiment to return tensor
+    def convert_output_to_grasp_mat(self, samples, return_arr=True):
+        """_summary_
 
         Args:
-            samples (_type_): _description_
+            samples (dict): pred_angles, pred_pose_transl can be of two types.
+            One is after positional encoding, one is original format (mat or vec)
+            but ['rot_matrix'] and ['transl'] must be mat or vec for same interface.
+            return_arr (bool, optional): _description_. Defaults to True.
 
         Returns:
             _type_: _description_
@@ -396,8 +372,12 @@ class FFHFlowPosEncWithTransl(Metaclass):
             pred_transl[pred_transl > value_range / 2] -= value_range
             pred_transl_all[idx] = pred_transl
 
-        samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
-        samples['transl'] = torch.from_numpy(pred_transl_all).cuda()
+        if return_arr:
+            samples['rot_matrix'] = pred_rot_matrix
+            samples['transl'] = pred_transl_all
+        else:
+            samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
+            samples['transl'] = torch.from_numpy(pred_transl_all).cuda()
         return samples
 
     def show_grasps(self, pcd_path, samples: Dict, i: int, base_path: str = '', save: bool = False):
