@@ -7,6 +7,7 @@ import transforms3d
 from yacs.config import CfgNode
 import os
 from ffhflow.utils.visualization import show_generated_grasp_distribution
+import copy
 
 from . import Metaclass
 from .backbones import BPSMLP, FFHGenerator, PointNetfeat
@@ -189,6 +190,7 @@ class FFHFlowPosEnc(Metaclass):
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
                     rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
                     transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
 
@@ -277,7 +279,7 @@ class FFHFlowPosEnc(Metaclass):
             tensor: _description_
         """
         # move data to cuda
-        bps_tensor = torch.tensor(bps).to('cuda')
+        bps_tensor = bps.to('cuda')
         bps_tensor = bps_tensor.view(1,-1)
 
         batch = {'bps_object': bps_tensor}
@@ -381,12 +383,13 @@ class FFHFlowPosEnc(Metaclass):
             samples (Dict): with numpy arr
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
-        if torch.is_tensor(samples['rot_matrix']):
-            samples['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
-            samples['transl'] = samples['transl'].cpu().data.numpy()
-            samples['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+        samples_copy = copy.deepcopy(samples)
+        if torch.is_tensor(samples_copy['rot_matrix']):
+            samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
+            samples_copy['transl'] = samples['transl'].cpu().data.numpy()
+            samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
 
-        show_generated_grasp_distribution(pcd_path, samples, save_ix=i)
+        show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
 
         if save:
             i = 0

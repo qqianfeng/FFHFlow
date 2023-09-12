@@ -7,6 +7,7 @@ import transforms3d
 from yacs.config import CfgNode
 import os
 from ffhflow.utils.visualization import show_generated_grasp_distribution
+import copy
 
 from . import Metaclass
 from .backbones import BPSMLP, FFHGenerator, PointNetfeat
@@ -190,6 +191,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
         losses = dict(loss=loss.detach(),
                     loss_nll=loss_nll.detach(),
                     rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
                     transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
 
@@ -275,11 +277,12 @@ class FFHFlowPosEncWithTransl(Metaclass):
             num_samples (int): _description_
 
         Returns:
-            _type_: _description_
+            tensor: _description_
         """
-        bps = bps.view(1,-1)
         # move data to cuda
-        bps_tensor = torch.tensor(bps).to('cuda')
+        bps_tensor = bps.to('cuda')
+        bps_tensor = bps_tensor.view(1,-1)
+
         batch = {'bps_object': bps_tensor}
         self.backbone.to('cuda')
         self.flow.to('cuda')
@@ -296,6 +299,10 @@ class FFHFlowPosEncWithTransl(Metaclass):
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
+
+        # convert position encoding to original format of matrix or vector
+        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+
         return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
@@ -311,8 +318,6 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         for k, v in samples.items():
             # so far no output as pred_joint_conf
-            if k == 'pred_joint_conf':
-                continue
             index = indices.clone()
             dim = 0
 
@@ -375,29 +380,37 @@ class FFHFlowPosEncWithTransl(Metaclass):
         if return_arr:
             samples['rot_matrix'] = pred_rot_matrix
             samples['transl'] = pred_transl_all
+            samples['joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+
         else:
             samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
             samples['transl'] = torch.from_numpy(pred_transl_all).cuda()
+            samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int, base_path: str = '', save: bool = False):
+    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False):
         """Visualization of grasps
 
         Args:
             pcd_path (str): _description_
-            samples (Dict): _description_
-            i (int): index of sample
+            samples (Dict): with numpy arr
+            i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
-        grasps = self.convert_output_to_grasp_mat(samples)
-        show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
+        samples_copy = copy.deepcopy(samples)
+        if torch.is_tensor(samples_copy['rot_matrix']):
+            samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
+            samples_copy['transl'] = samples['transl'].cpu().data.numpy()
+            samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+
+        show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
 
         if save:
             i = 0
             self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
             centr_T_palm = np.zeros((4,4))
-            centr_T_palm[:3,:3] = grasps['rot_matrix'][i]
-            centr_T_palm[:3,-1] = pred_transl[i]
+            centr_T_palm[:3,:3] = samples['rot_matrix'][i]
+            centr_T_palm[:3,-1] = samples['transl'][i]
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
