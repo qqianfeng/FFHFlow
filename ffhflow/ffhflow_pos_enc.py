@@ -386,8 +386,8 @@ class FFHFlowPosEnc(Metaclass):
             self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
             centr_T_palm = np.zeros((4,4))
-            centr_T_palm[:3,:3] = grasps['rot_matrix'][i]
-            centr_T_palm[:3,-1] = grasps['transl'][i]
+            centr_T_palm[:3,:3] = samples['rot_matrix'][i]
+            centr_T_palm[:3,-1] = samples['transl'][i]
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
