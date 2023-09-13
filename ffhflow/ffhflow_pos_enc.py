@@ -309,7 +309,7 @@ class FFHFlowPosEnc(Metaclass):
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
-        thresh = sorted_score[int(filt_num)]
+        thresh = sorted_score[int(filt_num)-1]
         indices = indices[sorted_score > thresh]
         sorted_score = sorted_score[sorted_score > thresh]
 
