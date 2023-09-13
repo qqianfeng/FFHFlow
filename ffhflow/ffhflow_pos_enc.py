@@ -380,7 +380,7 @@ class FFHFlowPosEnc(Metaclass):
 
         Args:
             pcd_path (str): _description_
-            samples (Dict): with numpy arr
+            samples (Dict): with of tensor
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
         samples_copy = {}
