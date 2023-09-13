@@ -396,7 +396,9 @@ class FFHFlowPosEncWithTransl(Metaclass):
             samples (Dict): with numpy arr
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
-        samples_copy = copy.deepcopy(samples)
+        samples_copy = {}
+        for key, value in samples.items():
+            samples_copy[key] = value.clone().detach()
         if torch.is_tensor(samples_copy['rot_matrix']):
             samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
             samples_copy['transl'] = samples['transl'].cpu().data.numpy()
