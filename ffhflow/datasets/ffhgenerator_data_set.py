@@ -100,6 +100,28 @@ class FFHGeneratorDataset(data.Dataset):
         hom_matrix = utils.hom_matrix_from_pos_quat_list(pos_quat_list)
         return hom_matrix
 
+    def get_grasps_from_pcd_path(self, pcd_path):
+        base_path, pcd_name = os.path.split(pcd_path)
+        base_path = base_path.replace('pcd','bps')
+        bps_name = pcd_name.replace('pcd', 'bps')
+        bps_name = bps_name.replace('.bps','.npy')
+        bps_path = os.path.join(base_path, bps_name)
+        obj_name = '_'.join(bps_name.split('_bps')[:-1])
+        centr_T_mesh = self.read_pcd_transform(bps_path)
+        # bps_path = bps_path.replace('multi','single')
+        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='positive')
+
+        palm_poses_rot_mat = np.zeros((len(palm_poses),3,3))
+        palm_poses_transl = np.zeros((len(palm_poses),3))
+
+        for idx in range(len(palm_poses)):
+            palm_pose_hom = utils.hom_matrix_from_pos_quat_list(palm_poses[idx])
+            palm_pose_centr = np.matmul(centr_T_mesh, palm_pose_hom)
+            palm_poses_rot_mat[idx] = palm_pose_centr[:3,:3]
+            palm_poses_transl[idx] = palm_pose_centr[:3,-1]
+        grasps = {'rot_matrix':palm_poses_rot_mat, 'transl': palm_poses_transl, 'joint_conf': joint_confs}
+        return grasps
+
     def __getitem__(self, idx):
         """ Batch contains: N random different object bps, each one successful grasp
         Dataset size = total_num_successful_grasps * N_bps_per_object, e.g. 15.000 * 50 = 750k

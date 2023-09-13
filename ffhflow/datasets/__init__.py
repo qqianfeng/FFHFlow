@@ -55,3 +55,6 @@ class FFHDataModule(pl.LightningDataModule):
                                                         drop_last=True,
                                                         num_workers=self.cfg.GENERAL.NUM_WORKERS)
         return val_dataloader
+
+    def val_dataset(self):
+        return FFHGeneratorDataset(self.cfg, eval=True)

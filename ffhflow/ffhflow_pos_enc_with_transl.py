@@ -396,14 +396,16 @@ class FFHFlowPosEncWithTransl(Metaclass):
             samples (Dict): with of tensor
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
-        samples_copy = {}
-        for key, value in samples.items():
-            samples_copy[key] = value.clone().detach()
-        if torch.is_tensor(samples_copy['rot_matrix']):
-            samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
-            samples_copy['transl'] = samples['transl'].cpu().data.numpy()
-            samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
 
+        if torch.is_tensor(samples['rot_matrix']):
+            samples_copy = {}
+            for key, value in samples.items():
+                samples_copy[key] = value.cpu().data.numpy()
+            # samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
+            # samples_copy['transl'] = samples['transl'].cpu().data.numpy()
+            # samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+        else:
+            samples_copy = samples
         show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
 
         if save:
