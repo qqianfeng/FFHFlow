@@ -310,7 +310,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
-        thresh = sorted_score[int(filt_num)]
+        thresh = sorted_score[int(filt_num)-1]
         indices = indices[sorted_score > thresh]
         sorted_score = sorted_score[sorted_score > thresh]
 
@@ -371,7 +371,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
             palm_transl_max = 0.2628828995958964
             pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
             value_range = palm_transl_max - palm_transl_min
-            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) - palm_transl_min
+            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
 
             pred_transl[pred_transl < -value_range / 2] += value_range
             pred_transl[pred_transl > value_range / 2] -= value_range
@@ -393,7 +393,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         Args:
             pcd_path (str): _description_
-            samples (Dict): with numpy arr
+            samples (Dict): with of tensor
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
         samples_copy = {}
