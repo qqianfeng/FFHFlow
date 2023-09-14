@@ -62,6 +62,7 @@ def compute_spread(rotations, rotations_gt):
 
 
 def maad_for_grasp_distribution(grasp1, grasp2):
+    # TODO add joint conf
     if torch.is_tensor(grasp1['rot_matrix']):
         grasp1['rot_matrix'] = grasp1['rot_matrix'].cpu().data.numpy()
         grasp1['transl'] = grasp1['transl'].cpu().data.numpy()
