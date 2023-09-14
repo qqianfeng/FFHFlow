@@ -79,7 +79,7 @@ class GraspDataHandlerVae:
             else:
                 idx = idx
 
-            if outcome == 'collision' or 'non_collision_not_executed':
+            if outcome == 'collision' or outcome == 'non_collision_not_executed':
                 joint_preshape_name = "desired_preshape_joint_state"
             else:
                 # only executed grasps have this data
