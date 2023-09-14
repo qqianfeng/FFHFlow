@@ -52,13 +52,15 @@ class GraspFlowPosEncNegGrasp(nn.Module):
         # input of positional encoded angles
         angles = batch['angle_vector']  # [batch_size,3,3]
         angles = self.pe.forward_localinn(angles)
-
         angles = angles.reshape(batch_size, -1).to(feats.dtype)
-        transl = batch['transl']
-        transl = transl.reshape(batch_size, -1).to(feats.dtype)
-        joint_conf = batch['joint_conf']
-        joint_conf = joint_conf.reshape(batch_size, -1).to(feats.dtype)
 
+        transl = batch['transl']
+        transl = self.pe.forward_transl(transl)
+        transl = transl.reshape(batch_size, -1).to(feats.dtype)
+
+        joint_conf = batch['joint_conf']
+
+        joint_conf = joint_conf.reshape(batch_size, -1).to(feats.dtype)
         samples = torch.cat([angles, transl, joint_conf],dim=1)
 
         feats = feats.reshape(batch_size, -1)
@@ -104,6 +106,9 @@ class GraspFlowPosEncNegGrasp(nn.Module):
         pred_pose = pred_pose.reshape(batch_size, num_samples, 3, -1)
         pred_angles = self.pe.backward(pred_pose)
 
-        pred_pose_transl = pred_params[:, :, 60:63]
-        pred_joint_conf = pred_params[:, :, 63:]
+        pred_pose_transl = pred_params[:, :, 60:120]
+        pred_pose_transl = pred_pose_transl.reshape(batch_size, num_samples, 3, -1)
+        pred_pose_transl = self.pe.backward_transl(pred_pose_transl)
+
+        pred_joint_conf = pred_params[:, :, 120:]
         return log_prob, z, pred_angles, pred_pose_transl, pred_joint_conf

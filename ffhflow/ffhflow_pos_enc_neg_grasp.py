@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import torch
 import transforms3d
 from yacs.config import CfgNode
-
+import os
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
@@ -278,12 +278,13 @@ class FFHFlowPosEncNegGrasp(Metaclass):
             num_samples (int): _description_
 
         Returns:
-            _type_: _description_
+            tensor: _description_
         """
-        bps = torch.tile(bps, (1,1))
         # move data to cuda
-        bps = bps.to('cuda')
-        batch = {'bps_object': bps}
+        bps_tensor = bps.to('cuda')
+        bps_tensor = bps_tensor.view(1,-1)
+
+        batch = {'bps_object': bps_tensor}
         self.backbone.to('cuda')
         self.flow.to('cuda')
 
@@ -299,6 +300,10 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
+
+        # convert position encoding to original format of matrix or vector
+        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+
         return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
@@ -306,7 +311,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
-        thresh = sorted_score[int(filt_num)]
+        thresh = sorted_score[int(filt_num)-1]
         indices = indices[sorted_score > thresh]
         sorted_score = sorted_score[sorted_score > thresh]
 
@@ -314,8 +319,6 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         for k, v in samples.items():
             # so far no output as pred_joint_conf
-            if k == 'pred_joint_conf':
-                continue
             index = indices.clone()
             dim = 0
 
@@ -334,24 +337,83 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         return filt_grasps
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int):
-        """Visualization of grasps
+    def save_to_path(self, np_arr, name, base_path):
+        np.save(os.path.join(base_path,name), np_arr)
+
+    def convert_output_to_grasp_mat(self, samples, return_arr=True):
+        """_summary_
 
         Args:
-            pcd_path (str): _description_
-            samples (Dict): _description_
-            i (int): index of sample
+            samples (dict): pred_angles, pred_pose_transl can be of two types.
+            One is after positional encoding, one is original format (mat or vec)
+            but ['rot_matrix'] and ['transl'] must be mat or vec for same interface.
+            return_arr (bool, optional): _description_. Defaults to True.
+
+        Returns:
+            _type_: _description_
         """
         num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_rot_matrix = np.zeros((num_samples,3,3))
+        pred_transl_all = np.zeros((num_samples,3))
+
         for idx in range(num_samples):
             pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            # rescale rotation prediction back
             pred_angles = pred_angles * 2 * np.pi - np.pi
+            pred_angles[pred_angles < -np.pi] += 2 * np.pi
+
             alpha, beta, gamma = pred_angles
             mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
             pred_rot_matrix[idx] = mat
 
-        pred_transl = samples['pred_pose_transl'].cpu().data.numpy()
+            # rescale transl prediction back
 
-        grasps = {'rot_matrix': pred_rot_matrix, 'transl': pred_transl}
-        show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
+            palm_transl_min = -0.3150945039775345
+            palm_transl_max = 0.2628828995958964
+            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
+            value_range = palm_transl_max - palm_transl_min
+            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
+
+            pred_transl[pred_transl < -value_range / 2] += value_range
+            pred_transl[pred_transl > value_range / 2] -= value_range
+            pred_transl_all[idx] = pred_transl
+
+        if return_arr:
+            samples['rot_matrix'] = pred_rot_matrix
+            samples['transl'] = pred_transl_all
+            samples['joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+
+        else:
+            samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
+            samples['transl'] = torch.from_numpy(pred_transl_all).cuda()
+            samples['joint_conf'] = samples['pred_joint_conf']
+        return samples
+
+    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False):
+        """Visualization of grasps
+
+        Args:
+            pcd_path (str): _description_
+            samples (Dict): with of tensor
+            i (int): index of sample. If i = -1, no images will be triggered to ask for save
+        """
+        samples_copy = {}
+        for key, value in samples.items():
+            samples_copy[key] = value.clone().detach()
+        if torch.is_tensor(samples_copy['rot_matrix']):
+            samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
+            samples_copy['transl'] = samples['transl'].cpu().data.numpy()
+            samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+
+        show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
+
+        if save:
+            i = 0
+            self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
+
+            centr_T_palm = np.zeros((4,4))
+            centr_T_palm[:3,:3] = samples['rot_matrix'][i]
+            centr_T_palm[:3,-1] = samples['transl'][i]
+            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
+
+            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
