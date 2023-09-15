@@ -131,6 +131,7 @@ class FFHGenerator(nn.Module):
 
 class BPSMLP(nn.Module):
     def __init__(self,
+                 cfg,
                  n_neurons=512,
                  in_bps=4096,
                  dtype=torch.float64,
@@ -140,7 +141,7 @@ class BPSMLP(nn.Module):
         self.bn1 = nn.BatchNorm1d(in_bps)
         self.rb1 = ResBlock(in_bps, n_neurons)
         self.rb2 = ResBlock(in_bps + n_neurons, n_neurons)
-        self.rb3 = ResBlock(in_bps + n_neurons, n_neurons)
+        self.rb3 = ResBlock(in_bps + n_neurons, cfg.MODEL.FLOW.DIM)
         self.dout = nn.Dropout(0.3)
         self.sigmoid = nn.Sigmoid()
 
