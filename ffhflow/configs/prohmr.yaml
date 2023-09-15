@@ -15,7 +15,7 @@ GENERAL:
 TRAIN:
   LR: 1e-4
   # WEIGHT_DECAY: 1e-4
-  BATCH_SIZE: 100
+  BATCH_SIZE: 64
   LOSS_REDUCTION: mean
   NUM_TRAIN_SAMPLES: 1
   NUM_TEST_SAMPLES: 1
@@ -46,8 +46,8 @@ MODEL:
 
   FLOW:
     DIM: 135 # input dims, also the same dim for base distribution of standard norm
-    NUM_LAYERS: 4 # numbers of layers about [Actnorm, LULinear, Coupling]
-    CONTEXT_FEATURES: 512 # features dim from backbone (TODO: try context_features same dim as DIM)
+    NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
+    CONTEXT_FEATURES: 135 # features dim from backbone (TODO: try context_features same dim as DIM)
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
     LAYER_DEPTH: 2 # number of resblock in resnet
   FC_HEAD:
