@@ -206,6 +206,28 @@ def hard_negative_from_positive(palm_pos_hom):
 
     return palm_hneg_hom
 
+def full_joint_conf_from_vae_joint_conf(vae_joint_conf):
+    """Takes in the 15 dimensional joint conf output from VAE and repeats the 3*N-th dimension to turn dim 15 into dim 20.
+
+    Args:
+        vae_joint_conf (np array): dim(vae_joint_conf.position) = 15
+
+    Returns:
+        full_joint_conf (JointState): Full joint state with dim(full_joint_conf.position) = 20
+    """
+    full_joint_pos = np.zeros(20)
+    ix_full_joint_pos = 0
+    for i in range(vae_joint_conf.shape[0]):
+        if (i + 1) % 3 == 0:
+            full_joint_pos[ix_full_joint_pos] = vae_joint_conf[i]
+            full_joint_pos[ix_full_joint_pos + 1] = vae_joint_conf[i]
+            ix_full_joint_pos += 2
+        else:
+            full_joint_pos[ix_full_joint_pos] = vae_joint_conf[i]
+            ix_full_joint_pos += 1
+
+    return full_joint_pos
+
 
 def hom_matrix_from_pos_quat_list(rot_quat_list):
     """Get quaternion from ros tf in format of xyzw.
