@@ -88,7 +88,7 @@ class PositionalEncoding(nn.Module):
         """_summary_
 
         Args:
-            P (Tensor): [batch_size, 3, 4]
+            P (Tensor): [batch_size, 3, 20]
 
         Returns:
             Tensor: _description_
@@ -115,7 +115,7 @@ class PositionalEncoding(nn.Module):
         """_summary_
 
         Args:
-            P (Tensor): [batch_size, 3, 4]
+            P (Tensor): [batch_size, 3, 20]
 
         Returns:
             Tensor: _description_
