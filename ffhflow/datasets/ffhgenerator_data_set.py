@@ -177,7 +177,7 @@ class FFHGeneratorDataset(data.Dataset):
         beta = (beta + np.pi) / 2 / np.pi
         gamma = (gamma + np.pi) / 2 / np.pi
 
-        # Normalize transl
+        # Normalize transl if you use positional encoding
         # [ 0.20864879992399918, -0.21115427946708953]
         # [ 0.13591848442440144, -0.3150945039775345 ]
         # [ 0.2628828995958964, -0.1773658852579449]
