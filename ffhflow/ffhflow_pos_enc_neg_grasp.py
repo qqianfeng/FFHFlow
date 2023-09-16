@@ -7,6 +7,7 @@ import transforms3d
 from yacs.config import CfgNode
 import os
 from ffhflow.utils.visualization import show_generated_grasp_distribution
+import copy
 
 from . import Metaclass
 from .backbones import BPSMLP, FFHGenerator, PointNetfeat
@@ -67,7 +68,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         # Create backbone feature extractor
         # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
-        self.backbone = BPSMLP()
+        self.backbone = BPSMLP(cfg)
 
         # # free param in backbone
         # for param in self.backbone.parameters():
@@ -183,8 +184,8 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
-                self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
+        # loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
+        loss = -self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
                 # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
             #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
@@ -193,6 +194,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
                     loss_nll_pos=loss_nll_pos.detach(),
                     loss_nll_neg=loss_nll_neg.detach(),
                     rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
                     transl_loss=transl_loss.detach())
                     # loss_pose_6d=loss_pose_6d.detach(),
 
@@ -233,7 +235,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
             self.tensorboard_logging(batch, output, self.global_step, train=True)
-
+        torch.cuda.empty_cache()
         return loss
 
     def validation_step(self, batch: Dict, batch_idx: int) -> Dict:
@@ -249,7 +251,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         loss = self.compute_loss(batch, output, train=False)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
-
+        torch.cuda.empty_cache()
         return output
 
     def tensorboard_logging(self, batch: Dict, output: Dict, step_count: int, train: bool = True) -> None:
@@ -397,14 +399,13 @@ class FFHFlowPosEncNegGrasp(Metaclass):
             samples (Dict): with of tensor
             i (int): index of sample. If i = -1, no images will be triggered to ask for save
         """
-        samples_copy = {}
-        for key, value in samples.items():
-            samples_copy[key] = value.clone().detach()
-        if torch.is_tensor(samples_copy['rot_matrix']):
-            samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
-            samples_copy['transl'] = samples['transl'].cpu().data.numpy()
-            samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
 
+        if torch.is_tensor(samples['rot_matrix']):
+            samples_copy = {}
+            for key, value in samples.items():
+                samples_copy[key] = value.cpu().data.numpy()
+        else:
+            samples_copy = samples
         show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
 
         if save:
