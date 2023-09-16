@@ -47,7 +47,7 @@ MODEL:
   FLOW:
     DIM: 135 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
-    CONTEXT_FEATURES: 135 # features dim from backbone (TODO: try context_features same dim as DIM)
+    CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
     LAYER_DEPTH: 2 # number of resblock in resnet
   FC_HEAD:

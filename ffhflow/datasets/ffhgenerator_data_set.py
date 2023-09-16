@@ -411,9 +411,9 @@ class FFHGeneratorPosNegDataset(FFHGeneratorDataset):
                     continue
                 f_path = os.path.join(obj_path, f_name)
                 if 'bps' in os.path.split(f_name)[1]:
-                    paths += n_success * [f_path]
+                    # paths += n_success * [f_path]
                     paths += int(self.neg_ratio * n_total) * [f_path]
-                    labels += n_success * ['positive']
+                    # labels += n_success * ['positive']
                     labels += int(self.neg_ratio * n_total) * ['negative']
 
         assert len(paths) == len(labels)
