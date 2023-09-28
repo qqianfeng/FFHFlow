@@ -33,7 +33,7 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             Dict: Dictionary containing image and mocap data dataloaders
         """
-        if self.cfg['Model']['WITH_NEG_GRASP']:
+        if self.cfg['MODEL']['WITH_NEG_GRASP']:
             dset_gen = FFHGeneratorPosNegDataset(self.cfg, eval=False)
         else:
             dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
@@ -51,7 +51,7 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             torch.utils.data.DataLoader: Validation dataloader
         """
-        if self.cfg['Model']['WITH_NEG_GRASP']:
+        if self.cfg['MODEL']['WITH_NEG_GRASP']:
             dset_gen = FFHGeneratorPosNegDataset(self.cfg, eval=False)
         else:
             dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
