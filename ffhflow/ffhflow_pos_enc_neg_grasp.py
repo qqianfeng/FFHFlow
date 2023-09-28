@@ -184,8 +184,8 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        # loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
-        loss = -self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
+                -self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
                 # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
             #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
