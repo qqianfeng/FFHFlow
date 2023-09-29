@@ -33,7 +33,7 @@ model = FFHFlowPosEncWithTransl(cfg)
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
                         os.path.join(args.root_dir, 'tensorboard'),
-                        every_n_epochs=1)
+                        save_last=True)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)

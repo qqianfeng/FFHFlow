@@ -228,7 +228,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         optimizer.zero_grad()
         self.manual_backward(loss)
-        clip_grad_norm(optimizer, max_norm=100)
+        # clip_grad_norm(optimizer, max_norm=100)
         optimizer.step()
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
