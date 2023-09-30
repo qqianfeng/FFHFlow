@@ -175,14 +175,21 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         # grasp -> z
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         log_prob_pos, log_prob_neg = log_prob
-        loss_nll_pos = -log_prob_pos.mean()
-        loss_nll_neg = log_prob_neg.mean()
+        if log_prob_pos.shape == torch.Size([0, 1]):
+            loss_nll_pos = torch.tensor(0).to('cuda')
+        else:
+            loss_nll_pos = -log_prob_pos.mean()
+        if log_prob_neg.shape == torch.Size([0, 1]):
+            loss_nll_neg = torch.tensor(0).to('cuda')
+        else:
+            loss_nll_neg = log_prob_neg.mean()
 
         # 3: Compute orthonormal loss on 6D representations
         # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
         # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
-
+        if loss_nll_neg < -1e6:
+            loss_nll_neg = torch.tensor(0).to('cuda')
         # combine all the losses
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
                 self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg

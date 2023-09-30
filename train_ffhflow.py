@@ -28,12 +28,12 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', 
 
 # Set up model
 # model = FFHFlow(cfg)
-model = FFHFlowPosEncWithTransl(cfg)
+model = FFHFlowPosEncNegGrasp(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
                         os.path.join(args.root_dir, 'tensorboard'),
-                        save_last=True)
+                        period=1)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
