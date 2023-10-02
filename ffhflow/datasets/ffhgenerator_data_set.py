@@ -109,7 +109,7 @@ class FFHGeneratorDataset(data.Dataset):
         obj_name = '_'.join(bps_name.split('_bps')[:-1])
         centr_T_mesh = self.read_pcd_transform(bps_path)
         # bps_path = bps_path.replace('multi','single')
-        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='negative')
+        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='positive')
 
         palm_poses_rot_mat = np.zeros((len(palm_poses),3,3))
         palm_poses_transl = np.zeros((len(palm_poses),3))
@@ -140,8 +140,10 @@ class FFHGeneratorDataset(data.Dataset):
         bps_obj = np.load(bps_path)
 
         # Read in a grasp for a given object (in mesh frame)
-        palm_pose, joint_conf, _ = self.grasp_data_handler.get_single_successful_grasp(obj_name,
-                                                                                    random=True)
+        # palm_pose, joint_conf, _ = self.grasp_data_handler.get_single_successful_grasp(obj_name,
+        #                                                                             random=True)
+        palm_pose, joint_conf, world_T_mesh = self.grasp_data_handler.get_single_grasp_of_outcome(
+            obj_name, outcome='negative', random=True)
         palm_pose_hom = utils.hom_matrix_from_pos_quat_list(palm_pose)
 
         # Transform grasp from mesh frame to object centroid
