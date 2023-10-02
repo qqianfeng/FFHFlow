@@ -109,7 +109,7 @@ class FFHGeneratorDataset(data.Dataset):
         obj_name = '_'.join(bps_name.split('_bps')[:-1])
         centr_T_mesh = self.read_pcd_transform(bps_path)
         # bps_path = bps_path.replace('multi','single')
-        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='positive')
+        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='negative')
 
         palm_poses_rot_mat = np.zeros((len(palm_poses),3,3))
         palm_poses_transl = np.zeros((len(palm_poses),3))

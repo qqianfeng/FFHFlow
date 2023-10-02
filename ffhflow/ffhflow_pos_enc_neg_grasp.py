@@ -188,7 +188,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
         # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
-        if loss_nll_neg < -1e6:
+        if loss_nll_neg < -1e3:
             loss_nll_neg = torch.tensor(0).to('cuda')
         # combine all the losses
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
