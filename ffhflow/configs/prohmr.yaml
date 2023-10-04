@@ -2,6 +2,9 @@ DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
   GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
+  POSITIVE_ONLY: False
+  NEGATIVE_ONLY: True
+  POS_AND_NEG_GRASP: False
 
 GENERAL:
   TOTAL_STEPS: 300000 #100000 for train with nll and second 100000 for fintune
@@ -35,7 +38,6 @@ LOSS_WEIGHTS:
   TRANSL: 0.1 # In FFHNet, transl coef is 100x of rot coef
 
 MODEL:
-  WITH_NEG_GRASP: False
   IMAGE_SIZE: 224
   IMAGE_MEAN: [0.485, 0.456, 0.406]
   IMAGE_STD: [0.229, 0.224, 0.225]

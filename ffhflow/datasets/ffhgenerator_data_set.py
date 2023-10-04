@@ -34,8 +34,18 @@ class FFHGeneratorDataset(data.Dataset):
         df_name_pos = df[df[ds_name] == 'X'].loc[:, ['Unnamed: 0', 'positive']]
         self.num_success_per_object = dict(
             zip(df_name_pos.iloc[:, 0], df_name_pos.iloc[:, 1].astype('int64')))
-        self.bps_paths, self.grasp_idxs = self.get_all_bps_paths_and_grasp_idxs(
-            self.objs_folder, self.num_success_per_object)
+        df_name_neg = df[df[ds_name] == 'X'].loc[:, ['Unnamed: 0', 'negative']]
+        self.num_failure_per_object = dict(
+            zip(df_name_neg.iloc[:, 0], df_name_neg.iloc[:, 1].astype('int64')))
+
+        if cfg['DATASETS']['POSITIVE_ONLY']:
+            self.bps_paths, self.grasp_idxs = self.get_all_bps_paths_and_grasp_idxs(
+                self.objs_folder, self.num_success_per_object)
+        elif cfg['DATASETS']['NEGATIVE_ONLY']:
+            self.bps_paths, self.grasp_idxs = self.get_all_bps_paths_and_grasp_idxs(
+                self.objs_folder, self.num_failure_per_object)
+        else:
+            raise KeyError("Wrong flag set for nagetiva and positive grasps!")
 
         self.cfg = cfg
         self.is_debug = False
@@ -140,10 +150,13 @@ class FFHGeneratorDataset(data.Dataset):
         bps_obj = np.load(bps_path)
 
         # Read in a grasp for a given object (in mesh frame)
-        # palm_pose, joint_conf, _ = self.grasp_data_handler.get_single_successful_grasp(obj_name,
-        #                                                                             random=True)
-        palm_pose, joint_conf, world_T_mesh = self.grasp_data_handler.get_single_grasp_of_outcome(
-            obj_name, outcome='negative', random=True)
+        if self.cfg['DATASETS']['POSITIVE_ONLY']:
+            palm_pose, joint_conf, _ = self.grasp_data_handler.get_single_successful_grasp(obj_name,
+                                                                                    random=True)
+        elif self.cfg['DATASETS']['NEGATIVE_ONLY']:
+            palm_pose, joint_conf, world_T_mesh = self.grasp_data_handler.get_single_grasp_of_outcome(
+                obj_name, outcome='negative', random=True)
+
         palm_pose_hom = utils.hom_matrix_from_pos_quat_list(palm_pose)
 
         # Transform grasp from mesh frame to object centroid

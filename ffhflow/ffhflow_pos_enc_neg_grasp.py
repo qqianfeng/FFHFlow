@@ -242,7 +242,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
             self.tensorboard_logging(batch, output, self.global_step, train=True)
-        torch.cuda.empty_cache()
+
         return loss
 
     def validation_step(self, batch: Dict, batch_idx: int) -> Dict:
@@ -258,7 +258,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         loss = self.compute_loss(batch, output, train=False)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
-        torch.cuda.empty_cache()
+
         return output
 
     def tensorboard_logging(self, batch: Dict, output: Dict, step_count: int, train: bool = True) -> None:
