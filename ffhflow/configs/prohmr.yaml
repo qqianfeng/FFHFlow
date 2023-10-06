@@ -1,3 +1,5 @@
+NAME: prohmr_flow_with_transl_input_only_nll_loss
+
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
   GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
@@ -25,26 +27,14 @@ TRAIN:
   WEIGHT_DECAY: 0.0005
 
 LOSS_WEIGHTS:
-  GLOBAL_ORIENT_EXP: 0.000
-  GLOBAL_ORIENT_MODE: 0.001
-  BODY_POSE_EXP: 0.0
-  BODY_POSE_MODE: 0.001
   ORTHOGONAL: 0.1
-  BETAS_EXP: 0.0
-  BETAS_MODE: 0.0005
   NLL: 0.001
-  ADVERSARIAL: 0.0005
   ROT: 0.1 # TODO: to be tuned
   TRANSL: 0.1 # In FFHNet, transl coef is 100x of rot coef
 
 MODEL:
-  IMAGE_SIZE: 224
-  IMAGE_MEAN: [0.485, 0.456, 0.406]
-  IMAGE_STD: [0.229, 0.224, 0.225]
   BACKBONE:
-    #FFHGenerator
-    LATENT_DIM: 5
-
+    LATENT_DIM: 5  #FFHGenerator
   FLOW:
     DIM: 135 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
@@ -56,6 +46,3 @@ MODEL:
 
 EXTRA:
   FOCAL_LENGTH: 5000
-  NUM_LOG_IMAGES: 4
-  NUM_LOG_SAMPLES_PER_IMAGE: 8
-  PELVIS_IND: 39
