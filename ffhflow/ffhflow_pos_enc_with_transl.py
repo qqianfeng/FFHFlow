@@ -270,6 +270,37 @@ class FFHFlowPosEncWithTransl(Metaclass):
         for loss_name, val in losses.items():
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
 
+    def predict_log_prob(self, bps, grasps):
+        """_summary_
+
+        Args:
+            batch (_type_): ["bps_object"]: bps
+                            ['angle_vector']  # [batch_size,3,3]
+                            ['transl']
+                            ['joint_conf']
+        Returns:
+            _type_: _description_
+        """
+        bps_tensor = bps.to('cuda')
+        self.backbone.to('cuda')
+        self.flow.to('cuda')
+
+        batch = {}
+        batch_size = grasps['pred_angles'].shape[0]
+        print('bps tensor size', bps_tensor.size())
+        if bps_tensor.dim() == 1:
+            bps_tensor = bps_tensor.unsqueeze(0)
+        assert bps_tensor.dim() == 2
+        batch['bps_object'] = bps_tensor.repeat(batch_size, 1)
+        batch['angle_vector'] = grasps['pred_angles']
+        batch['transl'] = grasps['pred_pose_transl']
+        batch['joint_conf'] = grasps['joint_conf']
+
+        conditioning_feats = self.backbone(batch)
+        log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
+
+        return log_prob
+
     def sample(self, bps, num_samples):
         """ generate number of grasp samples
 

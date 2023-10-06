@@ -8,6 +8,7 @@ from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
 from ffhflow.ffhflow_pos_enc_with_transl import FFHFlowPosEncWithTransl
 from ffhflow.utils.metrics import maad_for_grasp_distribution
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
+from ffhflow.ffhflow_pos_enc_neg_grasp import FFHFlowPosEncNegGrasp
 
 def save_batch_to_file(batch):
     torch.save(batch, "eval_batch.pth")
@@ -16,9 +17,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='models/ffhflow_bpsmlp_flow_pos_enc_glow_afflinecoupling_best_hparams/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='models/ffhflow_best_hparam_neg_grasp_only/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_bpsmlp_flow_pos_enc_glow_afflinecoupling_best_hparams/epoch=19-step=238153.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_best_hparam_neg_grasp_only/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -51,7 +52,7 @@ base_path = '/home/yb/Documents/ffhflow_grasp'
 #         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
 #         # model.show_gt_grasps(batch['pcd_path'][0], batch, i)
 
-# MAAD Metrics
+##### MAAD Metrics #######
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -62,23 +63,34 @@ print(len(val_loader))
 with torch.no_grad():
     batch = load_batch('eval_batch.pth')
     for idx in range(len(batch['obj_name'])):
-        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
+        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
-        # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
         out = model.sample(batch['bps_object'][idx], num_samples=100)
 
         transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
         transl_loss_sum += transl_loss
         rot_loss_sum += rot_loss
         joint_loss_sum += joint_loss
-        # model.show_grasps(batch['pcd_path'][0], out, i)
-        # # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
-        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
-        # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
-        model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300)
 
     print('transl_loss_sum:', transl_loss_sum)
     print('rot_loss_sum:', rot_loss_sum)
     print('joint_loss_sum:', joint_loss_sum)
+###########################
+
+#### VISUALIZATION #####
+print(len(val_loader))
+with torch.no_grad():
+    batch = load_batch('eval_batch.pth')
+    for idx in range(len(batch['obj_name'])):
+        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
+        grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
+
+        out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
+
+        # model.show_grasps(batch['pcd_path'][idx], out, idx)
+        filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
+        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
+        # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
+        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
+        # model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300)
