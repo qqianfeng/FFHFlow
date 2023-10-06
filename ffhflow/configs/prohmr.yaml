@@ -5,8 +5,8 @@ DATASETS:
   GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
   POSITIVE_ONLY: False
-  NEGATIVE_ONLY: True
-  POS_AND_NEG_GRASP: False
+  NEGATIVE_ONLY: False
+  POS_AND_NEG_GRASP: True
 
 GENERAL:
   TOTAL_STEPS: 300000 #100000 for train with nll and second 100000 for fintune
