@@ -181,10 +181,11 @@ class FFHFlowPosEncNegGrasp(Metaclass):
             loss_nll_pos = torch.tensor(0).to('cuda')
         else:
             loss_nll_pos = -log_prob_pos.mean()
+
+        log_prob_neg = log_prob_neg[log_prob_neg > -1e6].view(-1,1)
         if log_prob_neg.shape == torch.Size([0, 1]):
             loss_nll_neg = torch.tensor(0).to('cuda')
         else:
-            log_prob_neg = log_prob_neg[log_prob_neg > -1e6]
             loss_nll_neg = log_prob_neg.mean()
 
         # 3: Compute orthonormal loss on 6D representations
