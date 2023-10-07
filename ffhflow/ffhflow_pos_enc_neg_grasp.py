@@ -182,7 +182,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         else:
             loss_nll_pos = -log_prob_pos.mean()
 
-        log_prob_neg = log_prob_neg[log_prob_neg > -1e6].view(-1,1)
+        log_prob_neg = log_prob_neg[log_prob_neg > self.cfg.LOSS_WEIGHTS['C']].view(-1,1)
         if log_prob_neg.shape == torch.Size([0, 1]):
             loss_nll_neg = torch.tensor(0).to('cuda')
         else:
@@ -194,8 +194,8 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_pos +\
-                self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll_neg
+        loss = self.cfg.LOSS_WEIGHTS['NLL_POS'] * loss_nll_pos +\
+                self.cfg.LOSS_WEIGHTS['NLL_NEG'] * loss_nll_neg
                 # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
             #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
             #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss

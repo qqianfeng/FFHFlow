@@ -27,8 +27,11 @@ TRAIN:
   WEIGHT_DECAY: 0.0005
 
 LOSS_WEIGHTS:
+  C: -1e4  # truncate value for loss_neg_nll
   ORTHOGONAL: 0.1
-  NLL: 0.001
+  NLL: 1
+  NLL_POS: 1
+  NLL_NEG: 0.01
   ROT: 0.1 # TODO: to be tuned
   TRANSL: 0.1 # In FFHNet, transl coef is 100x of rot coef
 
