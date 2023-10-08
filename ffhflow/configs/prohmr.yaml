@@ -31,7 +31,7 @@ LOSS_WEIGHTS:
   ORTHOGONAL: 0.1
   NLL: 1
   NLL_POS: 1
-  NLL_NEG: 0.5
+  NLL_NEG: 1
   ROT: 0.1 # TODO: to be tuned
   TRANSL: 0.1 # In FFHNet, transl coef is 100x of rot coef
 
