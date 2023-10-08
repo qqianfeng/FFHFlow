@@ -63,4 +63,9 @@ class FFHDataModule(pl.LightningDataModule):
         return val_dataloader
 
     def val_dataset(self):
+        """Only for eval script to get access to Dataset class in order to obstain ground truth grasps
+
+        Returns:
+            _type_: _description_
+        """
         return FFHGeneratorDataset(self.cfg, eval=True)

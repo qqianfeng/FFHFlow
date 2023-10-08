@@ -6,6 +6,8 @@ import torch
 import transforms3d
 from yacs.config import CfgNode
 import os
+
+from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 import copy
 
@@ -241,6 +243,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         optimizer.zero_grad()
         self.manual_backward(loss)
+        # clip_grad_norm(optimizer, max_norm=100)
         optimizer.step()
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
