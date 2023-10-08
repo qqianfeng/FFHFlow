@@ -248,6 +248,73 @@ class FFHFlowPosEncNegGrasp(Metaclass):
 
         return loss
 
+    def compute_val_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
+        """
+        Compute losses given the input batch and the regression output
+        Args:
+            batch (Dict): Dictionary containing batch data
+            output (Dict): Dictionary containing the regression output
+            train (bool): Flag indicating whether it is training or validation mode
+        Returns:
+            torch.Tensor : Total loss for current batch
+        """
+
+        # 1. Reconstruction loss
+        pred_angles = output['pred_angles'].view(-1,3)
+        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,15)
+        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
+        gt_transl = batch['transl']
+        gt_joint_conf = batch['joint_conf']
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
+
+        # TODO: add joint as loss
+
+        # 2. Compute NLL loss
+        conditioning_feats = output['conditioning_feats']
+
+        # grasp -> z
+        log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
+        log_prob_pos, log_prob_neg = log_prob
+
+        # in case when whole batch only has pos or neg data samples. tensor.mean() will return NAN.
+        if log_prob_pos.shape == torch.Size([0, 1]):
+            loss_nll_pos = torch.tensor(0).to('cuda')
+        else:
+            loss_nll_pos = -log_prob_pos.mean()
+
+        # log_prob_neg = log_prob_neg[log_prob_neg > self.cfg.LOSS_WEIGHTS['C']].view(-1,1)
+        if log_prob_neg.shape == torch.Size([0, 1]):
+            loss_nll_neg = torch.tensor(0).to('cuda')
+        else:
+            loss_nll_neg = log_prob_neg.mean()
+
+        # 3: Compute orthonormal loss on 6D representations
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
+
+        # combine all the losses
+        loss = self.cfg.LOSS_WEIGHTS['NLL_POS'] * loss_nll_pos +\
+                self.cfg.LOSS_WEIGHTS['NLL_NEG'] * loss_nll_neg
+                # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+
+        losses = dict(loss=loss.detach(),
+                    loss_nll_pos=loss_nll_pos.detach(),
+                    loss_nll_neg=loss_nll_neg.detach(),
+                    rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
+                    transl_loss=transl_loss.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
+
+        output['losses'] = losses
+
+        return loss
+
     def validation_step(self, batch: Dict, batch_idx: int) -> Dict:
         """
         Run a validation step and log to Tensorboard
@@ -258,7 +325,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
             Dict: Dictionary containing regression output.
         """
         output = self.forward_step(batch, train=False)
-        loss = self.compute_loss(batch, output, train=False)
+        loss = self.compute_val_loss(batch, output, train=False)
         output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
