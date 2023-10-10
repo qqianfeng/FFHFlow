@@ -5,3 +5,4 @@ checkpoints/
 .vscode
 *.pyc
 *.egg-info
+*.pkl
