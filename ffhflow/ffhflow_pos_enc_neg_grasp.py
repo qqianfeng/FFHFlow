@@ -352,13 +352,13 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         for loss_name, val in losses.items():
             summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
 
-    def sample(self, bps, num_samples):
+    def sample(self, bps, num_samples, return_arr=False):
         """ generate number of grasp samples
 
         Args:
             bps (torch.Tensor): one bps object
             num_samples (int): _description_
-
+            return_arr (bool): False as default since sort_and_filter_grasps funcrtion takes tensor as input
         Returns:
             tensor: _description_
         """
@@ -384,7 +384,7 @@ class FFHFlowPosEncNegGrasp(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+        output = self.convert_output_to_grasp_mat(output, return_arr)
 
         return output
 

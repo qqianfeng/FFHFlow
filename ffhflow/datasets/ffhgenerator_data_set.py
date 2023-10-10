@@ -110,7 +110,7 @@ class FFHGeneratorDataset(data.Dataset):
         hom_matrix = utils.hom_matrix_from_pos_quat_list(pos_quat_list)
         return hom_matrix
 
-    def get_grasps_from_pcd_path(self, pcd_path):
+    def get_grasps_from_pcd_path(self, pcd_path,label='positive'):
         base_path, pcd_name = os.path.split(pcd_path)
         base_path = base_path.replace('pcd','bps')
         bps_name = pcd_name.replace('pcd', 'bps')
@@ -119,7 +119,7 @@ class FFHGeneratorDataset(data.Dataset):
         obj_name = '_'.join(bps_name.split('_bps')[:-1])
         centr_T_mesh = self.read_pcd_transform(bps_path)
         # bps_path = bps_path.replace('multi','single')
-        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome='positive')
+        palm_poses, joint_confs, _ = self.grasp_data_handler.get_grasps_for_object(obj_name=obj_name,outcome=label)
 
         palm_poses_rot_mat = np.zeros((len(palm_poses),3,3))
         palm_poses_transl = np.zeros((len(palm_poses),3))

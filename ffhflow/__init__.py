@@ -2,7 +2,7 @@ import torch
 import pytorch_lightning as pl
 
 from .utils import utils
-from ffhflow.utils.visualization import show_generated_grasp_distribution
+from ffhflow.utils.visualization import show_generated_grasp_distribution, show_generated_grasp_distribution_pos_neg
 
 
 class Metaclass(pl.LightningModule):
@@ -55,3 +55,16 @@ class Metaclass(pl.LightningModule):
     def show_gt_grasps(self, pcd_path, batch, i: int):
         grasps = {'rot_matrix': batch['rot_matrix'], 'transl': batch['transl']}
         show_generated_grasp_distribution(pcd_path, grasps, save_ix=i)
+
+    def show_gt_grasps_pos_neg(self, pcd_path, batch, i: int):
+        """Show both positive and negative grasps
+
+        Args:
+            pcd_path (_type_): _description_
+            batch (_type_): _description_
+            i (int): _description_
+        """
+        grasps_pos = {'rot_matrix': batch[0]['rot_matrix'], 'transl': batch[0]['transl']}
+        grasps_neg = {'rot_matrix': batch[1]['rot_matrix'], 'transl': batch[1]['transl']}
+
+        show_generated_grasp_distribution_pos_neg(pcd_path, [grasps_pos, grasps_neg], save_ix=i)
