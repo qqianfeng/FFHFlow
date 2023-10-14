@@ -49,26 +49,6 @@ def euclidean_distance_joint_conf_pairwise_np(joint1, joint2):
         dist_mat[idx] = dist_2
     return dist_mat
 
-def compute_spread(rotations, rotations_gt):
-    """Measures the spread of a distribution (or mode) around ground truth(s).
-
-    In the case of one ground truth, this is the expected angular error.
-    When there are multiple ground truths, the only related quantity that makes
-    sense is the expected angular error to the nearest ground truth.
-
-    Args:
-      rotations: The grid of rotation matrices for which the probabilities were
-        evaluated.
-      probabilities: The probability for each rotation.
-      rotations_gt: The set of ground truth rotation matrices.
-    Returns:
-      A scalar, the spread (in radians).
-    """
-    dists = geodesic_distance_rotmats_pairwise_np(rotations, rotations_gt)
-    min_distance_to_gt = np.min(dists, axis=1)
-    return (min_distance_to_gt).sum()
-
-
 def maad_for_grasp_distribution(grasp1, grasp2):
     """_summary_
 
