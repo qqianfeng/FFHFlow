@@ -5,6 +5,9 @@
 import torch
 import torchvision as tv
 import numpy as np
+import sys
+sys.path.insert(0,'/home/qf/workspace/normalizing-flows')
+print(sys.path)
 import normflows as nf
 from yacs.config import CfgNode
 
@@ -12,21 +15,22 @@ from matplotlib import pyplot as plt
 from tqdm import tqdm
 
 # Set up model
-class GraspGlow():
+class ConditionalGlow():
     def __init__(self,
-                 channels,
-                 hidden_channels,
-                 num_layers,
+                 input_dim,
+                 hidden_dim,
+                 flow_layers,
+                 res_num_layers,
+                 context_feature,
                  ) -> None:
 
         # Define flows
-        num_layers = 3
-        K = 16
+        num_multi_scale_layer = 3 # multi-scale layer
         torch.manual_seed(0)
-        input_shape = (3, 32, 32)
+        input_shape = (1, input_dim)
         n_dims = np.prod(input_shape)
-        channels = 3
-        hidden_channels = 256
+        channels = 1
+        hidden_channels = hidden_dim
         split_mode = 'channel'
         scale = True
 
@@ -34,23 +38,24 @@ class GraspGlow():
         q0 = []
         merges = []
         flows = []
-        for i in range(num_layers):
+        for i in range(num_multi_scale_layer):
             flows_ = []
-            for j in range(K):
-                flows_ += [nf.flows.GlowBlock(channels * 2 ** (num_layers + 1 - i), hidden_channels,
-                                            split_mode=split_mode, scale=scale)]
+            for j in range(flow_layers):
+                flows_ += [nf.flows.ConditionalGlowBlock(channels=channels * 2 ** (num_multi_scale_layer + 1 - i),
+                                                         hidden_channels=hidden_channels,
+                                                         context_feature=context_feature,
+                                                         num_blocks=res_num_layers,
+                                                         split_mode=spli t_mode, scale=scale)]
             flows_ += [nf.flows.Squeeze()]
             flows += [flows_]
             if i > 0:
                 merges += [nf.flows.Merge()]
-                latent_shape = (input_shape[0] * 2 ** (num_layers - i), input_shape[1] // 2 ** (num_layers - i),
-                                input_shape[2] // 2 ** (num_layers - i))
+                latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer - i), input_shape[1] // 2 ** (num_multi_scale_layer - i))
             else:
-                latent_shape = (input_shape[0] * 2 ** (num_layers + 1), input_shape[1] // 2 ** num_layers,
-                                input_shape[2] // 2 ** num_layers)
-
-            q0 += [nf.distributions.(latent_shape, num_classes)]
-
+                latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer + 1), input_shape[1] // 2 ** num_multi_scale_layer)
+            # q0 += [nf.distributions.ClassCondDiagGaussian(latent_shape, num_classes)]
+            # This should be the same as standard norm if we set fixed mean and variance.
+            q0 += [nf.distributions.DiagGaussian(latent_shape,trainable=False)]
 
         # Construct flow model with the multiscale architecture
         model = nf.MultiscaleFlow(q0, flows, merges)
@@ -60,7 +65,7 @@ class GraspGlow():
         device = torch.device('cuda' if torch.cuda.is_available() and enable_cuda else 'cpu')
         self.model = model.to(device)
 
-
+"""
 optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3, weight_decay=1e-5)
 
 for i in tqdm(range(max_iter)):
@@ -78,3 +83,4 @@ for i in tqdm(range(max_iter)):
 
     loss_hist = np.append(loss_hist, loss.detach().to('cpu').numpy())
     del(x, y, loss)
+"""
