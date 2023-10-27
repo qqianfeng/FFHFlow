@@ -11,8 +11,8 @@ from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
-from .backbones import BPSMLP, FFHGenerator, PointNetfeat
-from .heads import GraspFlowPosEnc, GraspFlowPosEncWithTransl
+from .backbones import BPSMLP
+from .heads import GraspFlowPosEncWithTransl
 from .utils import utils
 
 
@@ -301,7 +301,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         return log_prob
 
-    def sample(self, bps, num_samples):
+    def sample(self, bps, num_samples,return_arr=False):
         """ generate number of grasp samples
 
         Args:
@@ -333,12 +333,21 @@ class FFHFlowPosEncWithTransl(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+        output = self.convert_output_to_grasp_mat(output, return_arr=return_arr)
 
         return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
+        """_summary_
 
+        Args:
+            samples (Dict): tensor
+            perc (float, optional): _description_. Defaults to 0.5.
+            return_arr (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
