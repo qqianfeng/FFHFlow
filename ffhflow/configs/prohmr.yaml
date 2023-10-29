@@ -1,8 +1,8 @@
-NAME: prohmr_flow_with_transl_input_only_nll_loss
+NAME: ffhflow_gmm_mode2_trainable_mean_randn_deeper_resdim_256
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
-  GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
+  GAZEBO_OBJ_PATH: /home/Dyb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
   POSITIVE_ONLY: True
   NEGATIVE_ONLY: False
@@ -39,11 +39,13 @@ MODEL:
   BACKBONE:
     LATENT_DIM: 5  #FFHGenerator
   FLOW:
+    GMM_MODE: 2
+    GMM_TRAINABLE: True
     DIM: 135 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
-    LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
-    LAYER_DEPTH: 4 # number of resblock in resnet
+    LAYER_HIDDEN_FEATURES: 256 #512 # hidden layer dims in resnet inside Glow
+    LAYER_DEPTH: 4 #4 number of resblock in resnet
   FC_HEAD:
     NUM_FEATURES: 1024
 
