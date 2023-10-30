@@ -8,7 +8,7 @@ from yacs.config import CfgNode
 from ffhflow.utils.utils import rot_matrix_from_ortho6d
 from .local_inn import PositionalEncoding
 
-class GraspFlowPosEncWithTransl(nn.Module):
+class NormflowsGraspFlowPosEncWithTransl(nn.Module):
     """
     Normalizing flow implemented according to PROHMR paper. The forward and backward direction are both computed for loss.
     So 'grasp' -> 'z' and also 'z' -> 'grasp'.
@@ -20,9 +20,12 @@ class GraspFlowPosEncWithTransl(nn.Module):
         """
         super().__init__()
         self.cfg = cfg
-        self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
-                                    cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
+        glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.DIM,
+                                    hidden_dim=cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
+                                    flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
+                                    res_num_layers=cfg.MODEL.FLOW.LAYER_DEPTH,
                                     context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
+        self.flow = glow.model
         self.pe = PositionalEncoding()
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:

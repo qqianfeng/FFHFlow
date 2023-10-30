@@ -21,45 +21,66 @@ class ConditionalGlow():
                  hidden_dim,
                  flow_layers,
                  res_num_layers,
-                 context_feature,
+                 context_features,
                  ) -> None:
 
         # Define flows
-        num_multi_scale_layer = 3 # multi-scale layer
         torch.manual_seed(0)
         input_shape = (1, input_dim)
-        n_dims = np.prod(input_shape)
         channels = 1
         hidden_channels = hidden_dim
         split_mode = 'channel'
         scale = True
 
         # Set up flows, distributions and merge operations
+        # num_multi_scale_layer = 3 # multi-scale layer
+        # q0 = []
+        # merges = []
+        # flows = []
+        # for i in range(num_multi_scale_layer):
+        #     flows_ = []
+        #     for j in range(flow_layers):
+        #         flows_ += [nf.flows.ConditionalGlowBlock(channels=channels * 2 ** (num_multi_scale_layer + 1 - i), # 16，8，4
+        #                                                  hidden_channels=hidden_channels,
+        #                                                  context_feature=context_features,
+        #                                                  num_blocks=res_num_layers,
+        #                                                  split_mode=split_mode, scale=scale)]
+        #     flows_ += [nf.flows.Squeeze()]
+        #     flows += [flows_]
+        #     if i > 0:
+        #         merges += [nf.flows.Merge()] # opposite to split
+        #         latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer - i), input_shape[1] // 2 ** (num_multi_scale_layer - i))
+        #     else:
+        #         latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer + 1), input_shape[1] // 2 ** num_multi_scale_layer)
+        #     # q0 += [nf.distributions.ClassCondDiagGaussian(latent_shape, num_classes)]
+        #     # This should be the same as standard norm if we set fixed mean and variance.
+        #     q0 += [nf.distributions.DiagGaussian(latent_shape,trainable=False)]
+
+        # # Construct flow model with the multiscale architecture
+        # model = nf.MultiscaleFlow(q0, flows, merges)
         q0 = []
-        merges = []
         flows = []
-        for i in range(num_multi_scale_layer):
-            flows_ = []
-            for j in range(flow_layers):
-                flows_ += [nf.flows.ConditionalGlowBlock(channels=channels * 2 ** (num_multi_scale_layer + 1 - i),
-                                                         hidden_channels=hidden_channels,
-                                                         context_feature=context_feature,
-                                                         num_blocks=res_num_layers,
-                                                         split_mode=spli t_mode, scale=scale)]
-            flows_ += [nf.flows.Squeeze()]
-            flows += [flows_]
-            if i > 0:
-                merges += [nf.flows.Merge()]
-                latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer - i), input_shape[1] // 2 ** (num_multi_scale_layer - i))
-            else:
-                latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer + 1), input_shape[1] // 2 ** num_multi_scale_layer)
-            # q0 += [nf.distributions.ClassCondDiagGaussian(latent_shape, num_classes)]
-            # This should be the same as standard norm if we set fixed mean and variance.
-            q0 += [nf.distributions.DiagGaussian(latent_shape,trainable=False)]
+        flows_ = []
+        for j in range(flow_layers):
+            flows_ += [nf.flows.ConditionalGlowBlock(input_dim=input_dim, # 4
+                                                        hidden_dim=hidden_channels,
+                                                        context_feature=context_features,
+                                                        num_blocks=res_num_layers,
+                                                        split_mode=split_mode, scale=scale)]
+        # flows_ += [nf.flows.Squeeze()]
+        # flows += [flows_]
+        # if i > 0:
+        #     merges += [nf.flows.Merge()] # opposite to split
+        #     latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer - i), input_shape[1] // 2 ** (num_multi_scale_layer - i))
+        # else:
+        latent_shape = (input_shape[0] * 2 ** 2, input_shape[1] // 2 ** 1)
+        # # q0 += [nf.distributions.ClassCondDiagGaussian(latent_shape, num_classes)]
+        # # This should be the same as standard norm if we set fixed mean and variance.
+        q0 = nf.distributions.GaussianMixture(n_modes=1,dim=input_dim,
+                                                loc=np.zeros((1,input_dim)),trainable=False)
 
         # Construct flow model with the multiscale architecture
-        model = nf.MultiscaleFlow(q0, flows, merges)
-
+        model = nf.ConditionalNormalizingFlow(q0, flows)
         # Move model on GPU if available
         enable_cuda = True
         device = torch.device('cuda' if torch.cuda.is_available() and enable_cuda else 'cpu')
