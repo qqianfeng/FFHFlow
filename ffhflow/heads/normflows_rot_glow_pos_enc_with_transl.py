@@ -87,7 +87,7 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
         assert z is None
 
         # Generates samples from the distribution together with their log probability.
-        samples, log_prob, z = self.flow.sample_and_log_prob(num_samples, context=feats)
+        samples, log_prob = self.flow.sample(num_samples, context=feats)
         z = z.reshape(batch_size, num_samples, -1)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
