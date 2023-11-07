@@ -1,4 +1,5 @@
 NAME: prohmr_flow_with_transl_input_only_nll_loss
+BASE_PACKAGE: normflows # nflows
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
@@ -39,7 +40,7 @@ MODEL:
   BACKBONE:
     LATENT_DIM: 5  #FFHGenerator
   FLOW:
-    DIM: 135 # input dims, also the same dim for base distribution of standard norm
+    DIM: 136 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
