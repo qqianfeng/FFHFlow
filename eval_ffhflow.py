@@ -2,7 +2,9 @@ import argparse
 import torch
 import os
 import pickle
-
+import sys
+sys.path.insert(0,'/home/qf/workspace/nflows')
+print(sys.path)
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
@@ -18,9 +20,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='models/ffhflow_flow_pos_enc_res_depth4_epoch25/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/tensorboard//hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_flow_pos_enc_res_depth4_epoch25/epoch=25-step=299983.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/tensorboard/epoch=22-step=269999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -99,7 +101,7 @@ with torch.no_grad():
         # with open('data.pkl', 'wb') as fp:
         #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-        # model.show_grasps(batch['pcd_path'][idx], out, idx)
+        model.show_grasps(batch['pcd_path'][idx], out, idx)
         filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
