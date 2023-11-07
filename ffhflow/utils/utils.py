@@ -215,6 +215,9 @@ def full_joint_conf_from_vae_joint_conf(vae_joint_conf):
     Returns:
         full_joint_conf (JointState): Full joint state with dim(full_joint_conf.position) = 20
     """
+    # for split to run we have to have even joint dim so 15->16
+    if vae_joint_conf.shape[0] == 16:
+        vae_joint_conf = vae_joint_conf[:15]
     full_joint_pos = np.zeros(20)
     ix_full_joint_pos = 0
     for i in range(vae_joint_conf.shape[0]):

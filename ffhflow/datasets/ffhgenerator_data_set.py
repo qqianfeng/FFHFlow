@@ -170,6 +170,10 @@ class FFHGeneratorDataset(data.Dataset):
 
         # Turn the full 20 DoF into 15 DoF as every 4th joint is coupled with the third
         joint_conf = utils.reduce_joint_conf(joint_conf)
+        if self.cfg['BASE_PACKAGE'] == 'normflows':
+            joint_conf_even = np.zeros(16)
+            joint_conf_even[:15] = joint_conf
+            joint_conf = joint_conf_even
 
         # Extract rotmat and transl
         palm_rot_matrix = palm_pose_centr[:3, :3]

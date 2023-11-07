@@ -135,7 +135,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             self.initialize(batch, conditioning_feats)
 
         # z -> grasp
-        log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
 
         output = {}
         output['log_prod'] = log_prob
@@ -160,7 +160,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # 1. Reconstruction loss
         pred_angles = output['pred_angles'].view(-1,3)
         pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        pred_joint_conf = output['pred_joint_conf'].view(-1,15)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
         gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
         gt_joint_conf = batch['joint_conf']
@@ -320,11 +320,11 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         self.flow.to('cuda')
 
         conditioning_feats = self.backbone(batch)
-        log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
-        pred_joint_conf = pred_joint_conf.view(-1, 15)
+        pred_joint_conf = pred_joint_conf.view(-1, 16)
 
         output = {}
         output['log_prob'] = log_prob

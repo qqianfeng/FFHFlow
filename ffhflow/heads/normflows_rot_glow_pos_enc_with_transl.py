@@ -88,7 +88,6 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
 
         # Generates samples from the distribution together with their log probability.
         samples, log_prob = self.flow.sample(num_samples, context=feats)
-        z = z.reshape(batch_size, num_samples, -1)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
         pred_pose = pred_params[:, :, :60]
@@ -101,4 +100,4 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
         pred_pose_transl = self.pe.backward_transl(pred_pose_transl)
 
         pred_joint_conf = pred_params[:, :, 120:]
-        return log_prob, z, pred_angles, pred_pose_transl, pred_joint_conf
+        return log_prob, pred_angles, pred_pose_transl, pred_joint_conf
