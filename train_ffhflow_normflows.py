@@ -22,7 +22,7 @@ args = parser.parse_args()
 cfg = get_config(args.model_cfg)
 
 # Setup Tensorboard logger
-logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
+logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)
 
 # Set up model
 # model = FFHFlow(cfg)

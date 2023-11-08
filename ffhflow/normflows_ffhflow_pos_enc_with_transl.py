@@ -129,9 +129,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         # change dim of joint conf to 16 for split
         if self.cfg['BASE_PACKAGE'] == 'normflows':
-            for idx in range(batch['joint_conf'].shape[0]):
-                batch['joint_conf'][idx] = batch['joint_conf'][idx][:15]
-
+            new_joint_conf = torch.zeros((batch['joint_conf'].shape[0],16)).to('cuda')
+            new_joint_conf[:,:15] = batch['joint_conf']
+            batch['joint_conf'] = new_joint_conf
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
         conditioning_feats = self.backbone(batch)
 
@@ -165,10 +165,11 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # 1. Reconstruction loss
         pred_angles = output['pred_angles'].view(-1,3)
         pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        pred_joint_conf = output['pred_joint_conf'].view(-1,15)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
+        pred_joint_conf = pred_joint_conf[:,:15]
         gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
-        gt_joint_conf = batch['joint_conf']
+        gt_joint_conf = batch['joint_conf'][:,:15]
         rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
         joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
