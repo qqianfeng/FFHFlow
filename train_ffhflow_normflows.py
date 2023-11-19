@@ -30,7 +30,7 @@ model = NormflowsFFHFlowPosEncWithTransl(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, 'tensorboard'),
+                        os.path.join(args.root_dir, cfg['NAME']),
                         every_n_train_steps=10000,
                         save_top_k=-1)
 
@@ -38,7 +38,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = 'checkpoints/tensorboard/epoch=1-step=44031.ckpt'
+ckpt_path = 'checkpoints/normflow_affine_old_best_param_gmm2_trainable/epoch=17-step=209999.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -59,7 +59,7 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
 trainer.fit(model, datamodule=ffh_datamodule)
 
 # copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'tensorboard', 'hparams.yaml')
+fname = os.path.join(args.root_dir, cfg['NAME'], 'hparams.yaml')
 if os.path.isfile(fname):
     os.remove(fname)
 
