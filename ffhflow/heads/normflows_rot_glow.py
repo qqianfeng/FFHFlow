@@ -6,7 +6,7 @@ import torch
 import torchvision as tv
 import numpy as np
 import sys
-sys.path.insert(0,'/home/qf/workspace/normalizing-flows')
+sys.path.insert(0,'/home/yb/workspace/normalizing-flows')
 print(sys.path)
 import normflows as nf
 from yacs.config import CfgNode
@@ -26,36 +26,10 @@ class ConditionalGlow():
 
         # Define flows
         torch.manual_seed(0)
-        input_shape = (1, input_dim)
-        channels = 1
         hidden_channels = hidden_dim
         split_mode = 'channel'
         # True is affine / False is addctive
         scale = True
-
-        # Set up flows, distributions and merge operations
-        # num_multi_scale_layer = 3 # multi-scale layer
-        # q0 = []
-        # merges = []
-        # flows = []
-        # for i in range(num_multi_scale_layer):
-        #     flows_ = []
-        #     for j in range(flow_layers):
-        #         flows_ += [nf.flows.ConditionalGlowBlock(channels=channels * 2 ** (num_multi_scale_layer + 1 - i), # 16，8，4
-        #                                                  hidden_channels=hidden_channels,
-        #                                                  context_feature=context_features,
-        #                                                  num_blocks=res_num_layers,
-        #                                                  split_mode=split_mode, scale=scale)]
-        #     flows_ += [nf.flows.Squeeze()]
-        #     flows += [flows_]
-        #     if i > 0:
-        #         merges += [nf.flows.Merge()] # opposite to split
-        #         latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer - i), input_shape[1] // 2 ** (num_multi_scale_layer - i))
-        #     else:
-        #         latent_shape = (input_shape[0] * 2 ** (num_multi_scale_layer + 1), input_shape[1] // 2 ** num_multi_scale_layer)
-        #     # q0 += [nf.distributions.ClassCondDiagGaussian(latent_shape, num_classes)]
-        #     # This should be the same as standard norm if we set fixed mean and variance.
-        #     q0 += [nf.distributions.DiagGaussian(latent_shape,trainable=False)]
 
         # # Construct flow model with the multiscale architecture
         # model = nf.MultiscaleFlow(q0, flows, merges)
