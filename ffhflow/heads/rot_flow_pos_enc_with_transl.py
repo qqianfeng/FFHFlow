@@ -1,3 +1,7 @@
+import sys
+sys.path.insert(0,'/home/yb/workspace/modified_nflows')
+print(sys.path)
+
 import torch
 import torch.nn as nn
 from torch.cuda.amp import autocast
@@ -22,6 +26,8 @@ class GraspFlowPosEncWithTransl(nn.Module):
         self.cfg = cfg
         self.flow = ConditionalGlow(cfg.MODEL.FLOW.DIM, cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                     cfg.MODEL.FLOW.NUM_LAYERS, cfg.MODEL.FLOW.LAYER_DEPTH,
+                                    gmm_mode=cfg.MODEL.FLOW.GMM_MODE,
+                                    gmm_trainable=cfg.MODEL.FLOW.GMM_TRAINABLE,
                                     context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
         self.pe = PositionalEncoding()
 

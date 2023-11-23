@@ -4,6 +4,7 @@ import os
 import pickle
 # If the nflow package is not pip installed
 import sys
+# clone this repo https://github.com/qianbot/nflows
 sys.path.insert(0,'/home/yb/workspace/nflows')
 
 from ffhflow.configs import get_config
@@ -21,9 +22,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='models/ffhflow_flow_pos_enc_res_depth4_epoch25/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/ffhflow_flow_pos_enc_res_depth4_epoch25/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='models/ffhflow_flow_pos_enc_res_depth4_epoch25/epoch=25-step=299983.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/ffhflow_flow_pos_enc_res_depth4_epoch25/epoch=25-step=299983.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -42,20 +43,7 @@ model.eval()
 val_loader = ffh_datamodule.val_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
-base_path = '/home/yb/Documents/ffhflow_grasp'
-# # Go over the images in the dataset.
-# with torch.no_grad():
-#     for i, batch in enumerate(val_loader):
-#         if i <2:
-#             continue
-#         out = model.sample(batch['bps_object'][0], num_samples=100)
-#         model.show_grasps(batch['pcd_path'][0], out, i)
-#         # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
-#         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
-#         filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-#         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
-#         # model.show_gt_grasps(batch['pcd_path'][0], batch, i)
-
+save_path = '/home/yb/Documents/ffhflow_grasp'
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -102,11 +90,11 @@ with torch.no_grad():
         # with open('data.pkl', 'wb') as fp:
         #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-        # model.show_grasps(batch['pcd_path'][idx], out, idx)
+        model.show_grasps(batch['pcd_path'][idx], out, idx)
         filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
+        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, save_path, save=False)
         # model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300)
 
 

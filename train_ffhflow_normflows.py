@@ -5,8 +5,9 @@ import shutil
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 import sys
+# clone repo: https://github.com/qianbot/normalizing-flows
 sys.path.insert(0,'/home/yb/workspace/normalizing-flows')
-print(sys.path)
+
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl

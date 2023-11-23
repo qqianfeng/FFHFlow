@@ -38,20 +38,7 @@ model.eval()
 val_loader = ffh_datamodule.val_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
-base_path = '/home/yb/Documents/ffhflow_grasp'
-# # Go over the images in the dataset.
-# with torch.no_grad():
-#     for i, batch in enumerate(val_loader):
-#         if i <2:
-#             continue
-#         out = model.sample(batch['bps_object'][0], num_samples=100)
-#         model.show_grasps(batch['pcd_path'][0], out, i)
-#         # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
-#         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
-#         filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-#         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
-#         # model.show_gt_grasps(batch['pcd_path'][0], batch, i)
-
+save_path = '/home/yb/Documents/ffhflow_grasp'
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -65,7 +52,7 @@ print(len(val_loader))
 with torch.no_grad():
     batch = load_batch('eval_batch.pth')
     for idx in range(len(batch['obj_name'])):
-        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
+        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
         out = model.sample(batch['bps_object'][idx], num_samples=100)
@@ -93,7 +80,7 @@ with torch.no_grad():
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
         # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-        out = model.sample(batch['bps_object'][idx], num_samples=100,return_arr=True)
+        out = model.sample(batch['bps_object'][idx], num_samples=100)
 
         # If we need to save the results for FFHEvaluator
         # with open('flow_grasps.pkl', 'wb') as fp:
@@ -105,7 +92,7 @@ with torch.no_grad():
         filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
+        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, save_path, save=False)
         # model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300)
 
 

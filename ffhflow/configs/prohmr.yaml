@@ -3,14 +3,14 @@ BASE_PACKAGE: normflows # nflows
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
-  GAZEBO_OBJ_PATH: /home/yb/Projects/gazebo-objects
+  GAZEBO_OBJ_PATH: /home/Dyb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
   POSITIVE_ONLY: True
   NEGATIVE_ONLY: False
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 300000 #100000 for train with nll and second 100000 for fintune
+  TOTAL_STEPS: 400000 #100000 for train with nll and second 100000 for fintune
   LOG_STEPS: 100
   VAL_STEPS: 100
   CHECKPOINT_STEPS: 1000
@@ -40,13 +40,15 @@ MODEL:
   BACKBONE:
     LATENT_DIM: 5  #FFHGenerator
   FLOW:
+    GMM_MODE: 2
+    GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
     DIM: 136 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
-    LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
-    LAYER_DEPTH: 4 # number of resblock in resnet
+    LAYER_HIDDEN_FEATURES: 512 #512 # hidden layer dims in resnet inside Glow
+    LAYER_DEPTH: 4 #4 number of resblock in resnet
   FC_HEAD:
     NUM_FEATURES: 1024
 
