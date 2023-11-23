@@ -22,7 +22,7 @@ python setup.py develop
 ```
 
 ## Folder structure
-
+```
 |── environment.yml
 ├── eval_batch.pth
 ├── eval_ffhflow_2models.py
@@ -68,3 +68,4 @@ python setup.py develop
 ├── setup.py
 ├── train_ffhflow_normflows.py
 └── train_ffhflow.py
+```
