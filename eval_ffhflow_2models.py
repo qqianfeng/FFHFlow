@@ -1,3 +1,4 @@
+"Script to evaluate a model trained on positive grasps plus a model trained on negative grasps"
 import argparse
 import torch
 import os
