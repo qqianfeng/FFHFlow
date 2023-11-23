@@ -2,9 +2,9 @@ import argparse
 import torch
 import os
 import pickle
+# If the nflow package is not pip installed
 import sys
 sys.path.insert(0,'/home/yb/workspace/nflows')
-print(sys.path)
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
