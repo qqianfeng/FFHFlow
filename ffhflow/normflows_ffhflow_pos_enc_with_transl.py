@@ -2,7 +2,6 @@ import os
 from typing import Any, Dict, Tuple
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
 import transforms3d
 from yacs.config import CfgNode
