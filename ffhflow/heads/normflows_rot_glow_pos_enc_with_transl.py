@@ -1,11 +1,9 @@
 import torch
 import torch.nn as nn
-from torch.cuda.amp import autocast
 from typing import Optional, Dict, Tuple
 from .normflows_rot_glow import ConditionalGlow
 from yacs.config import CfgNode
 
-from ffhflow.utils.utils import rot_matrix_from_ortho6d
 from .local_inn import PositionalEncoding
 
 class NormflowsGraspFlowPosEncWithTransl(nn.Module):

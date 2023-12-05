@@ -17,9 +17,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_old_best_param/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -56,6 +56,7 @@ grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
 ##### MAAD Metrics #######
+import math
 
 transl_loss_sum = 0
 rot_loss_sum = 0
@@ -70,10 +71,12 @@ with torch.no_grad():
         out = model.sample(batch['bps_object'][idx], num_samples=100)
 
         transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
-        transl_loss_sum += transl_loss
-        rot_loss_sum += rot_loss
-        joint_loss_sum += joint_loss
-
+        if not math.isnan(transl_loss):
+            transl_loss_sum += transl_loss
+        if not math.isnan(rot_loss):
+            rot_loss_sum += rot_loss
+        if not math.isnan(joint_loss):
+            joint_loss_sum += joint_loss
     print('transl_loss_sum:', transl_loss_sum)
     print('rot_loss_sum:', rot_loss_sum)
     print('joint_loss_sum:', joint_loss_sum)

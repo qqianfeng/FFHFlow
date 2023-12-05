@@ -411,11 +411,10 @@ def show_generated_grasp_distribution_pos_neg(pcd_path,
         path (str): Path to the object pcd
         grasps (dict): contains arrays rot_matrix [n*3*3], palm transl [n*3], joint_conf [n*15]
     """
-    n_samples = grasps[0]['rot_matrix'].shape[0]
     frames = []
     grasps_pos = grasps[0]
     grasps_neg = grasps[1]
-    for i in range(n_samples):
+    for i in range(grasps[0]['rot_matrix'].shape[0]):
         rot_matrix = grasps_pos['rot_matrix'][i, :, :]
         transl = grasps_pos['transl'][i, :]
         palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(
@@ -428,7 +427,7 @@ def show_generated_grasp_distribution_pos_neg(pcd_path,
                 palm_pose_centr)
         frames.append(frame)
 
-    for i in range(n_samples):
+    for i in range(grasps[1]['rot_matrix'].shape[0]):
         rot_matrix = grasps_neg['rot_matrix'][i, :, :]
         transl = grasps_neg['transl'][i, :]
         palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(

@@ -1,4 +1,4 @@
-NAME: prohmr_flow_with_transl_input_only_nll_loss
+NAME: normflow_affine_old_best_param_clip500
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -40,6 +40,8 @@ MODEL:
   BACKBONE:
     LATENT_DIM: 5  #FFHGenerator
   FLOW:
+    # DIM should be 136 for normflow package (split requires even number)
+    # DIM is 135 for nflows pacakge.
     DIM: 136 # input dims, also the same dim for base distribution of standard norm
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
