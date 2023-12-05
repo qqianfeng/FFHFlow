@@ -1,4 +1,4 @@
-NAME: normflow_affine_old_best_param_clip500
+NAME: test
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -10,10 +10,10 @@ DATASETS:
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 300000 #100000 for train with nll and second 100000 for fintune
+  TOTAL_STEPS: 100000 #300000 for train with nll and second 100000 for fintune
   LOG_STEPS: 100
   VAL_STEPS: 100
-  CHECKPOINT_STEPS: 1000
+  # CHECKPOINT_STEPS: 100
   NUM_WORKERS: 8
 
 TRAIN:
@@ -47,8 +47,7 @@ MODEL:
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
     LAYER_DEPTH: 4 # number of resblock in resnet
-  FC_HEAD:
-    NUM_FEATURES: 1024
+
 
 EXTRA:
   FOCAL_LENGTH: 5000

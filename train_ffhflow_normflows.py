@@ -5,8 +5,8 @@ import shutil
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 import sys
-sys.path.insert(0,'/home/yb/workspace/normalizing-flows')
-print(sys.path)
+sys.path.insert(0,'/home/qf/workspace/normalizing-flows')
+
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl
@@ -31,7 +31,7 @@ model = NormflowsFFHFlowPosEncWithTransl(cfg)
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
                         os.path.join(args.root_dir, cfg['NAME']),
-                        every_n_train_steps=10000,
+                        every_n_train_steps=500,
                         save_top_k=-1)
 
 # configure dataloader
