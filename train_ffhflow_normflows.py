@@ -4,15 +4,17 @@ import shutil
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
+import sys
+# clone repo: https://github.com/qianbot/normalizing-flows
+sys.path.insert(0,'/home/yb/workspace/normalizing-flows')
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.ffhflow import FFHFlow
-from ffhflow.ffhflow_normal import FFHFlowNormal
-from ffhflow.ffhflow_vae import FFHFlowVAE
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl
+
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/local_inn.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
@@ -20,28 +22,24 @@ args = parser.parse_args()
 # Set up cfg
 cfg = get_config(args.model_cfg)
 
-# copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'hparams.yaml')
-if not os.path.isfile(fname):
-    shutil.copy(args.model_cfg, fname)
-
 # Setup Tensorboard logger
-logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
+logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)
 
 # Set up model
 # model = FFHFlow(cfg)
-model = FFHFlowVAE(cfg)
+model = NormflowsFFHFlowPosEncWithTransl(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, 'tensorboard'),
-                        every_n_epochs=1)
+                        os.path.join(args.root_dir, cfg['NAME']),
+                        every_n_train_steps=10000,
+                        save_top_k=-1)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-# ckpt_path = '/home/yb/workspace/ffhflow/checkpoints/epoch=7-step=97261.ckpt'
+ckpt_path = 'checkpoints/normflow_affine_old_best_param_gmm2_trainable/epoch=17-step=209999.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -60,3 +58,10 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
+
+# copy the config file to save_dir
+fname = os.path.join(args.root_dir, cfg['NAME'], 'hparams.yaml')
+if os.path.isfile(fname):
+    os.remove(fname)
+
+shutil.copy(args.model_cfg, fname)

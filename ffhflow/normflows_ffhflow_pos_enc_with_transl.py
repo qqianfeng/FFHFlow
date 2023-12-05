@@ -2,7 +2,6 @@ import os
 from typing import Any, Dict, Tuple
 
 import numpy as np
-import pytorch_lightning as pl
 import torch
 import transforms3d
 from yacs.config import CfgNode
@@ -12,7 +11,7 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
 from .backbones import BPSMLP
-from .heads import GraspFlowPosEncWithTransl
+from .heads import NormflowsGraspFlowPosEncWithTransl
 from .utils import utils
 
 
@@ -55,7 +54,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class FFHFlowPosEncWithTransl(Metaclass):
+class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -75,7 +74,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = GraspFlowPosEncWithTransl(cfg)
+        self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
@@ -127,6 +126,11 @@ class FFHFlowPosEncWithTransl(Metaclass):
         else:
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
 
+        # change dim of joint conf to 16 for split
+        if self.cfg['BASE_PACKAGE'] == 'normflows':
+            new_joint_conf = torch.zeros((batch['joint_conf'].shape[0],16)).to('cuda')
+            new_joint_conf[:,:15] = batch['joint_conf']
+            batch['joint_conf'] = new_joint_conf
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
         conditioning_feats = self.backbone(batch)
 
@@ -135,7 +139,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
             self.initialize(batch, conditioning_feats)
 
         # z -> grasp
-        log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
 
         output = {}
         output['log_prod'] = log_prob
@@ -160,10 +164,11 @@ class FFHFlowPosEncWithTransl(Metaclass):
         # 1. Reconstruction loss
         pred_angles = output['pred_angles'].view(-1,3)
         pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        pred_joint_conf = output['pred_joint_conf'].view(-1,15)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
+        pred_joint_conf = pred_joint_conf[:,:15]
         gt_angles = batch['angle_vector']  # [batch_size, 3,3]
         gt_transl = batch['transl']
-        gt_joint_conf = batch['joint_conf']
+        gt_joint_conf = batch['joint_conf'][:,:15]
         rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
         joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
@@ -301,7 +306,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         return log_prob
 
-    def sample(self, bps, num_samples,return_arr=False):
+    def sample(self, bps, num_samples):
         """ generate number of grasp samples
 
         Args:
@@ -320,11 +325,12 @@ class FFHFlowPosEncWithTransl(Metaclass):
         self.flow.to('cuda')
 
         conditioning_feats = self.backbone(batch)
-        log_prob, _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
-        pred_joint_conf = pred_joint_conf.view(-1, 15)
+        pred_joint_conf = pred_joint_conf.view(-1, 16)
+        pred_joint_conf = pred_joint_conf[:,:15]
 
         output = {}
         output['log_prob'] = log_prob
@@ -333,21 +339,12 @@ class FFHFlowPosEncWithTransl(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=return_arr)
+        output = self.convert_output_to_grasp_mat(output, return_arr=False)
 
         return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
-        """_summary_
 
-        Args:
-            samples (Dict): tensor
-            perc (float, optional): _description_. Defaults to 0.5.
-            return_arr (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            _type_: _description_
-        """
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
@@ -377,8 +374,8 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         return filt_grasps
 
-    def save_to_path(self, np_arr, name, save_path):
-        np.save(os.path.join(save_path,name), np_arr)
+    def save_to_path(self, np_arr, name, base_path):
+        np.save(os.path.join(base_path,name), np_arr)
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -429,7 +426,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
             samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, save_path: str = '', save: bool = False):
+    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False):
         """Visualization of grasps
 
         Args:
@@ -451,11 +448,11 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         if save:
             i = 0
-            self.save_to_path(pcd_path, 'pcd_path.npy', save_path)
+            self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
             centr_T_palm = np.zeros((4,4))
             centr_T_palm[:3,:3] = samples['rot_matrix'][i]
             centr_T_palm[:3,-1] = samples['transl'][i]
-            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', save_path)
+            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
-            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', save_path)
+            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)

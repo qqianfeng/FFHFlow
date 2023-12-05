@@ -5,8 +5,9 @@ import shutil
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 import sys
-sys.path.insert(0,'/home/yb/workspace/modified_nflows')
-print(sys.path)
+# clone this repo https://github.com/qianbot/nflows
+sys.path.insert(0,'/home/yb/workspace/nflows')
+
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow import FFHFlow

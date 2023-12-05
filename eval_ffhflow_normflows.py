@@ -2,18 +2,13 @@ import argparse
 import torch
 import os
 import pickle
-# If the nflow package is not pip installed
-import sys
-# clone this repo https://github.com/qianbot/nflows
-sys.path.insert(0,'/home/yb/workspace/nflows')
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.ffhflow_pos_enc import FFHFlowPosEnc
-from ffhflow.ffhflow_pos_enc_with_transl import FFHFlowPosEncWithTransl
 from ffhflow.utils.metrics import maad_for_grasp_distribution
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
-from ffhflow.ffhflow_pos_enc_neg_grasp import FFHFlowPosEncNegGrasp
+
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl
 
 def save_batch_to_file(batch):
     torch.save(batch, "eval_batch.pth")
@@ -22,9 +17,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='checkpoints/ffhflow_flow_pos_enc_res_depth4_epoch25/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_old_best_param/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/ffhflow_flow_pos_enc_res_depth4_epoch25/epoch=25-step=299983.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -37,7 +32,7 @@ ffh_datamodule = FFHDataModule(cfg)
 # Setup PyTorch Lightning Trainer
 ckpt_path = args.ckpt_path
 
-model = FFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
+model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 val_loader = ffh_datamodule.val_dataloader()
@@ -48,6 +43,7 @@ grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
 ##### MAAD Metrics #######
+import math
 
 transl_loss_sum = 0
 rot_loss_sum = 0
@@ -56,16 +52,18 @@ print(len(val_loader))
 with torch.no_grad():
     batch = load_batch('eval_batch.pth')
     for idx in range(len(batch['obj_name'])):
-        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
+        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
         out = model.sample(batch['bps_object'][idx], num_samples=100)
 
         transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
-        transl_loss_sum += transl_loss
-        rot_loss_sum += rot_loss
-        joint_loss_sum += joint_loss
-
+        if not math.isnan(transl_loss):
+            transl_loss_sum += transl_loss
+        if not math.isnan(rot_loss):
+            rot_loss_sum += rot_loss
+        if not math.isnan(joint_loss):
+            joint_loss_sum += joint_loss
     print('transl_loss_sum:', transl_loss_sum)
     print('rot_loss_sum:', rot_loss_sum)
     print('joint_loss_sum:', joint_loss_sum)
@@ -82,7 +80,7 @@ with torch.no_grad():
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
         # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-        out = model.sample(batch['bps_object'][idx], num_samples=100,return_arr=True)
+        out = model.sample(batch['bps_object'][idx], num_samples=100)
 
         # If we need to save the results for FFHEvaluator
         # with open('flow_grasps.pkl', 'wb') as fp:
@@ -90,7 +88,7 @@ with torch.no_grad():
         # with open('data.pkl', 'wb') as fp:
         #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-        model.show_grasps(batch['pcd_path'][idx], out, idx)
+        # model.show_grasps(batch['pcd_path'][idx], out, idx)
         filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)

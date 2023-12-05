@@ -1,4 +1,5 @@
-NAME: ffhflow_gmm_mode2_trainable_mean_randn_deeper_resdim_256
+NAME: normflow_affine_old_best_param_clip500
+BASE_PACKAGE: normflows # nflows
 
 DATASETS:
   PATH: /data/hdd1/qf/hithand_data/ffhnet-data
@@ -41,8 +42,10 @@ MODEL:
   FLOW:
     GMM_MODE: 2
     GMM_TRAINABLE: True
-    DIM: 135 # input dims, also the same dim for base distribution of standard norm
-    NUM_LAYERS: 6 # numbers of layers about [Actnorm, LULinear, Coupling]
+    # DIM should be 136 for normflow package (split requires even number)
+    # DIM is 135 for nflows pacakge.
+    DIM: 136 # input dims, also the same dim for base distribution of standard norm
+    NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     LAYER_HIDDEN_FEATURES: 512 #512 # hidden layer dims in resnet inside Glow
     LAYER_DEPTH: 4 #4 number of resblock in resnet
