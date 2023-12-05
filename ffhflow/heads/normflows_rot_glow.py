@@ -7,7 +7,7 @@ import torchvision as tv
 import numpy as np
 import sys
 sys.path.insert(0,'/home/qf/workspace/normalizing-flows')
-print(sys.path)
+
 import normflows as nf
 from yacs.config import CfgNode
 
@@ -69,6 +69,7 @@ class ConditionalGlow():
 
         q0 = nf.distributions.GaussianMixture(n_modes=1,dim=input_dim,
                                                 loc=np.zeros((1,input_dim)),trainable=False)
+        # q0 = nf.distributions.StandardNormal(shape=input_dim)
 
         # Construct flow model with the multiscale architecture
         model = nf.ConditionalNormalizingFlow(q0, flows)
