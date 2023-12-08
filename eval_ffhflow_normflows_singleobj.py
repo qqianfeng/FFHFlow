@@ -19,7 +19,7 @@ def load_batch(path):
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_single_obj/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_single_obj/epoch=57-step=5999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_single_obj/epoch=1713-step=177999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -46,8 +46,11 @@ with torch.no_grad():
         #     continue
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][i])
 
-        out = model.sample(batch['bps_object'][0], num_samples=100)
-        model.show_grasps(batch['pcd_path'][0], out, i)
+        out = model.sample(batch['bps_object'][0], num_samples=200)
+        # model.show_grasps(batch['pcd_path'][0], out, i)
+        out_np = model.convert_output_to_grasp_mat(out, return_arr=True)
+
+        model.show_gt_grasps_pos_neg(batch['pcd_path'][i], [grasps_gt, out_np], i+300)
 
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)

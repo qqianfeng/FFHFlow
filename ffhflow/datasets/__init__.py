@@ -39,7 +39,7 @@ class FFHDataModule(pl.LightningDataModule):
             dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
         train_dataloader = torch.utils.data.DataLoader(dset_gen,
                                                         batch_size=self.cfg.TRAIN.BATCH_SIZE,
-                                                        shuffle=True,
+                                                        shuffle=False,
                                                         drop_last=True,
                                                         num_workers=self.cfg.GENERAL.NUM_WORKERS)
 
