@@ -6,8 +6,9 @@ import torch
 import torchvision as tv
 import numpy as np
 import sys
-sys.path.insert(0,'/home/yb/workspace/normalizing-flows')
-print(sys.path)
+import os
+sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
+
 import normflows as nf
 from yacs.config import CfgNode
 
