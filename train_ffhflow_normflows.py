@@ -31,7 +31,7 @@ model = NormflowsFFHFlowPosEncWithTransl(cfg)
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
                         os.path.join(args.root_dir, cfg['NAME']),
-                        every_n_train_steps=500,
+                        every_n_train_steps=10000,
                         save_top_k=-1)
 
 # configure dataloader
