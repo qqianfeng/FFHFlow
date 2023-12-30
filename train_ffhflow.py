@@ -4,9 +4,10 @@ import shutil
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
-# import sys
-# sys.path.insert(0,'/home/yb/workspace/modified_nflows')
-# print(sys.path)
+import sys
+# clone this repo https://github.com/qianbot/nflows
+sys.path.insert(0,'/home/yb/workspace/nflows')
+
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.ffhflow import FFHFlow
@@ -27,7 +28,7 @@ args = parser.parse_args()
 cfg = get_config(args.model_cfg)
 
 # Setup Tensorboard logger
-logger = TensorBoardLogger(os.path.join(args.root_dir, 'tensorboard'), name='', version='', default_hp_metric=False)
+logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)
 
 # Set up model
 # model = FFHFlow(cfg)
@@ -35,7 +36,7 @@ model = FFHFlowPosEncWithTransl(cfg)
 
 # Setup checkpoint saving
 checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, 'tensorboard'),
+                        os.path.join(args.root_dir, cfg['NAME']),
                         every_n_train_steps=10000,
                         save_top_k=-1)
 
@@ -43,7 +44,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = 'checkpoints/tensorboard/epoch=1-step=44031.ckpt'
+ckpt_path = 'checkpoints/tensorboard/epoch=5-step=69999.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -64,7 +65,7 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
 trainer.fit(model, datamodule=ffh_datamodule)
 
 # copy the config file to save_dir
-fname = os.path.join(args.root_dir, 'tensorboard', 'hparams.yaml')
+fname = os.path.join(args.root_dir,  cfg['NAME'], 'hparams.yaml')
 if os.path.isfile(fname):
     os.remove(fname)
 

@@ -11,8 +11,8 @@ from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
-from .backbones import BPSMLP, FFHGenerator, PointNetfeat
-from .heads import GraspFlowPosEnc, GraspFlowPosEncWithTransl
+from .backbones import BPSMLP
+from .heads import GraspFlowPosEncWithTransl
 from .utils import utils
 
 
@@ -301,7 +301,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         return log_prob
 
-    def sample(self, bps, num_samples):
+    def sample(self, bps, num_samples,return_arr=False):
         """ generate number of grasp samples
 
         Args:
@@ -333,12 +333,21 @@ class FFHFlowPosEncWithTransl(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+        output = self.convert_output_to_grasp_mat(output, return_arr=return_arr)
 
         return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
+        """_summary_
 
+        Args:
+            samples (Dict): tensor
+            perc (float, optional): _description_. Defaults to 0.5.
+            return_arr (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """
         num_samples = samples['log_prob'].shape[0]
         filt_num = num_samples * perc
         sorted_score, indices = samples['log_prob'].sort(descending=True)
@@ -368,8 +377,8 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         return filt_grasps
 
-    def save_to_path(self, np_arr, name, base_path):
-        np.save(os.path.join(base_path,name), np_arr)
+    def save_to_path(self, np_arr, name, save_path):
+        np.save(os.path.join(save_path,name), np_arr)
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -420,7 +429,7 @@ class FFHFlowPosEncWithTransl(Metaclass):
             samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False):
+    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, save_path: str = '', save: bool = False):
         """Visualization of grasps
 
         Args:
@@ -442,11 +451,11 @@ class FFHFlowPosEncWithTransl(Metaclass):
 
         if save:
             i = 0
-            self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
+            self.save_to_path(pcd_path, 'pcd_path.npy', save_path)
 
             centr_T_palm = np.zeros((4,4))
             centr_T_palm[:3,:3] = samples['rot_matrix'][i]
             centr_T_palm[:3,-1] = samples['transl'][i]
-            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
+            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', save_path)
 
-            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
+            # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', save_path)
