@@ -80,7 +80,8 @@ class FFHGeneratorDataset(data.Dataset):
                 if 'bps' in os.path.split(f_name)[1]:
                     paths += n_success * [f_path]
                     grasp_idxs += range(0, n_success)
-            break
+            # add break for load only one obj
+            # break
         assert len(paths) == len(grasp_idxs)
         return paths, grasp_idxs
 

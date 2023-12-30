@@ -5,7 +5,7 @@ import shutil
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 import sys
-sys.path.insert(0,'/home/qf/workspace/normalizing-flows')
+sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
