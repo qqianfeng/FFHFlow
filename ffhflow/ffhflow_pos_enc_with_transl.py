@@ -429,6 +429,36 @@ class FFHFlowPosEncWithTransl(Metaclass):
             samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
+    def convert_output_to_grasp_mat_tensor(self, samples):
+        num_samples = samples['pred_angles'].shape[0]
+        pred_rot_matrix = np.zeros((num_samples,3,3))
+        pred_transl = np.zeros((num_samples,3))
+
+        for idx in range(num_samples):
+            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            # rescale rotation prediction back
+            pred_angles = pred_angles * 2 * np.pi - np.pi
+            pred_angles[pred_angles < -np.pi] += 2 * np.pi
+
+            alpha, beta, gamma = pred_angles
+            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
+            pred_rot_matrix[idx] = mat
+
+            # rescale transl prediction back
+
+            # palm_transl_min = -0.3150945039775345
+            # palm_transl_max = 0.2628828995958964
+            # pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
+            # value_range = palm_transl_max - palm_transl_min
+            # pred_transl = pred_transl * (palm_transl_max - palm_transl_min) - palm_transl_min
+
+            # pred_transl[pred_transl < -value_range / 2] += value_range
+            # pred_transl[pred_transl > value_range / 2] -= value_range
+
+        samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
+        samples['transl'] = samples['pred_pose_transl']
+        return samples
+
     def show_grasps(self, pcd_path, samples: Dict, i: int = 0, save_path: str = '', save: bool = False):
         """Visualization of grasps
 
