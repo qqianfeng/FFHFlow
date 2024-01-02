@@ -80,7 +80,8 @@ class FFHGeneratorDataset(data.Dataset):
                 if 'bps' in os.path.split(f_name)[1]:
                     paths += n_success * [f_path]
                     grasp_idxs += range(0, n_success)
-
+            # add break for load only one obj
+            # break
         assert len(paths) == len(grasp_idxs)
         return paths, grasp_idxs
 
@@ -551,7 +552,7 @@ if __name__ == '__main__':
     path = os.path.dirname(os.path.abspath(__file__))
     BASE_PATH = os.path.split(os.path.split(path)[0])[0]
 
-    path = os.path.join(BASE_PATH, "ffhflow/configs/local_inn.yaml")
+    path = os.path.join(BASE_PATH, "ffhflow/configs/prohmr.yaml")
     cfg = get_config(path)
     gds = FFHGeneratorDataset(cfg)
 

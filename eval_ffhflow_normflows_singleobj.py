@@ -17,9 +17,9 @@ def load_batch(path):
     return torch.load(path)
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_old_best_param/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_single_obj/hparams.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_single_obj/epoch=1713-step=177999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 
@@ -35,10 +35,28 @@ ckpt_path = args.ckpt_path
 model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
-val_loader = ffh_datamodule.val_dataloader()
+val_loader = ffh_datamodule.train_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
-save_path = '/home/yb/Documents/ffhflow_grasp'
+base_path = '/home/yb/Documents/ffhflow_grasp'
+# Go over the images in the dataset.
+with torch.no_grad():
+    for i, batch in enumerate(val_loader):
+        # if batch['obj_name']=='kit_BakingVanilla':
+        #     continue
+        grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][i])
+
+        out = model.sample(batch['bps_object'][0], num_samples=200)
+        # model.show_grasps(batch['pcd_path'][0], out, i)
+        out_np = model.convert_output_to_grasp_mat(out, return_arr=True)
+
+        model.show_gt_grasps_pos_neg(batch['pcd_path'][i], [grasps_gt, out_np], i+300)
+
+        # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
+        # model.show_grasps(batch['pcd_path'][0], filtered_out, i+100)
+        # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
+        # model.show_gt_grasps(batch['pcd_path'][0], batch, i)
+
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -52,10 +70,14 @@ print(len(val_loader))
 with torch.no_grad():
     batch = load_batch('eval_batch.pth')
     for idx in range(len(batch['obj_name'])):
-        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
+        palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
-        out = model.sample(batch['bps_object'][idx], num_samples=100)
+        out = model.sample(batch['bps_object'][idx], num_samples=100,return_arr=True)
+
+        # model.show_grasps(batch['pcd_path'][idx], out, idx)
+        filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
+        model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
 
         transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
         if not math.isnan(transl_loss):
@@ -80,7 +102,7 @@ with torch.no_grad():
         grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
         # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-        out = model.sample(batch['bps_object'][idx], num_samples=100)
+        out = model.sample(batch['bps_object'][idx], num_samples=100,return_arr=True)
 
         # If we need to save the results for FFHEvaluator
         # with open('flow_grasps.pkl', 'wb') as fp:
@@ -92,17 +114,15 @@ with torch.no_grad():
         filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
         model.show_grasps(batch['pcd_path'][0], filtered_out, idx+100)
         # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
-        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, save_path, save=False)
+        # # model.show_grasps(batch['pcd_path'][0], filtered_out, i+200, base_path, save=False)
         # model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300)
 
 
-# #### VISUALIZATION for POS + Neg Grasps#####
+#### VISUALIZATION for POS + Neg Grasps#####
 # print(len(val_loader))
 # with torch.no_grad():
 #     batch = load_batch('eval_batch.pth')
 #     for idx in range(len(batch['obj_name'])):
-#         if idx < 1:
-#             continue
 #         palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
 #         grasps_gt_pos = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx],label='positive')
 #         grasps_gt_neg = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx],label='negative')

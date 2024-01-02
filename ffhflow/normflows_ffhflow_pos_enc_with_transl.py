@@ -95,6 +95,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
                                         lr=self.cfg.TRAIN.LR,
                                         betas=(self.cfg.TRAIN.BETA1, 0.999),
                                         weight_decay=self.cfg.TRAIN.WEIGHT_DECAY)
+        # optimizer = torch.optim.SGD(params=list(self.backbone.parameters()) + list(self.flow.parameters()),
+        #                         lr=self.cfg.TRAIN.LR,
+        #                         momentum=0.9)
 
         return optimizer
 
