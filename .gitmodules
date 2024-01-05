@@ -1,0 +1,3 @@
+[submodule "dependencies/nflows"]
+	path = dependencies/nflows
+	url = https://github.com/qianbot/nflows
