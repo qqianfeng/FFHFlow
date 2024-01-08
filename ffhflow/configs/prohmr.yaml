@@ -2,8 +2,8 @@ NAME: test
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
-  PATH: /data/hdd1/qf/hithand_data/ffhnet-data
-  GAZEBO_OBJ_PATH: /home/Dyb/Projects/gazebo-objects
+  PATH: /data/net/userstore/qf/hithand_data/data/ffhnet-data # /data/hdd1/qf/hithand_data/ffhnet-data
+  GAZEBO_OBJ_PATH:  /data/net/userstore/qf/hithand_data/data/gazebo-objects # /home/Dyb/Projects/gazebo-objects
   GRASP_DATA_NANE: grasp_data_all.h5
   POSITIVE_ONLY: True
   NEGATIVE_ONLY: False
