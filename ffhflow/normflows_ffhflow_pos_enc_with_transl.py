@@ -21,6 +21,15 @@ def kl_divergence(mu, logvar, device="cpu"):
     """
     return torch.mean(-.5 * torch.sum(1. + logvar - mu**2 - torch.exp(logvar), dim=-1))
 
+def gaussian_nll(samples, mus, logvars):
+    return 0.5 * torch.add(
+        torch.sum(logvars + ((samples - mus)**2 / torch.exp(logvars))) / samples.shape[0],
+        np.log(2.0 * np.pi) * samples.shape[1]
+    )
+
+def gaussian_ent(logvars):
+    return 0.5 * torch.add(logvars.shape[1] * (1.0 + np.log(2.0 * np.pi)), logvars.sum(1).mean())
+
 
 def transl_l2_loss(pred_transl,
                    gt_transl,
@@ -54,6 +63,8 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
+
+
 class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
     def __init__(self, cfg: CfgNode):
@@ -65,6 +76,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         super().__init__()
 
         self.cfg = cfg
+        self.prob_backbone = cfg.MODEL.BACKBONE.PROBABILISTIC
 
         # Create backbone feature extractor
         # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
@@ -135,7 +147,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             new_joint_conf[:,:15] = batch['joint_conf']
             batch['joint_conf'] = new_joint_conf
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
-        conditioning_feats = self.backbone(batch)
+        cond_mean, cond_var, conditioning_feats = self.backbone(batch, return_mean_var=True)
 
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
@@ -150,6 +162,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
         output['conditioning_feats'] = conditioning_feats
+        if self.prob_backbone:
+            output['conditioning_mean'] = cond_mean
+            output['conditioning_var'] = cond_var
 
         return output
 
@@ -191,19 +206,25 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll 
                 # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
-            #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-            #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+                #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+                #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
-        losses = dict(loss=loss.detach(),
-                    loss_nll=loss_nll.detach(),
-                    rot_loss=rot_loss.detach(),
-                    joint_conf_loss=joint_conf_loss.detach(),
-                    transl_loss=transl_loss.detach())
-                    # loss_pose_6d=loss_pose_6d.detach(),
+        # Compute KL divergence between shape posterior and prior
+        if self.prob_backbone:
+            kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * gaussian_nll(output['conditioning_feats'], output['conditioning_mean'], output['conditioning_var']) 
+            kl_loss -= self.cfg.LOSS_WEIGHTS['KL_ENT'] * gaussian_ent(output['conditioning_var'])
+            loss += kl_loss
 
-        output['losses'] = losses
+        output['losses'] = dict(loss=loss.detach(),
+                                loss_nll=loss_nll.detach(),
+                                rot_loss=rot_loss.detach(),
+                                joint_conf_loss=joint_conf_loss.detach(),
+                                transl_loss=transl_loss.detach())
+                                # loss_pose_6d=loss_pose_6d.detach(),
+
+        # output['losses'] = losses
 
         return loss
 
