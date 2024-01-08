@@ -1,4 +1,4 @@
-NAME: test
+NAME: test_lvm1
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -10,7 +10,7 @@ DATASETS:
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 400000 #100000 for train with nll and second 100000 for fintune
+  TOTAL_STEPS: 150000 # 300000 #100000 for train with nll and second 100000 for fintune
   LOG_STEPS: 100
   VAL_STEPS: 100
   # CHECKPOINT_STEPS: 100
@@ -31,6 +31,8 @@ LOSS_WEIGHTS:
   C: -1e4  # truncate value for loss_neg_nll
   ORTHOGONAL: 0.1
   NLL: 1
+  KL_NLL: 1
+  KL_ENT: 1
   NLL_POS: 1
   NLL_NEG: 1
   ROT: 0.1 # TODO: to be tuned
@@ -39,9 +41,10 @@ LOSS_WEIGHTS:
 MODEL:
   BACKBONE:
     LATENT_DIM: 5  #FFHGenerator
+    PROBABILISTIC: True
   FLOW:
-    GMM_MODE: 2
-    GMM_TRAINABLE: True
+    # GMM_MODE: 2
+    # GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
     DIM: 136 # input dims, also the same dim for base distribution of standard norm
