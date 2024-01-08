@@ -43,9 +43,9 @@ class ConditionalGlow():
                                                         num_blocks=res_num_layers,
                                                         split_mode=split_mode, scale=scale)]
 
-        q0 = nf.distributions.GaussianMixture(n_modes=1,dim=input_dim,
-                                                loc=np.zeros((1,input_dim)),trainable=True)
-        # q0 = nf.distributions.StandardNormal(shape=input_dim)
+        # q0 = nf.distributions.GaussianMixture(n_modes=1,dim=input_dim,
+        #                                         loc=np.zeros((1,input_dim)),trainable=True)
+        q0 = nf.distributions.StandardNormal(shape=input_dim)
         # Construct flow model with the multiscale architecture
         model = nf.ConditionalNormalizingFlow(q0, flows)
         # Move model on GPU if available
