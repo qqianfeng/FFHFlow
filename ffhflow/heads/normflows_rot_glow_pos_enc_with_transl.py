@@ -19,10 +19,13 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
         super().__init__()
         self.cfg = cfg
         glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.DIM,
-                                    hidden_dim=cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
-                                    flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
-                                    res_num_layers=cfg.MODEL.FLOW.LAYER_DEPTH,
-                                    context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES)
+                                hidden_dim=cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
+                                flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
+                                res_num_layers=cfg.MODEL.FLOW.LAYER_DEPTH,
+                                context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
+                                base=cfg.MODEL.FLOW.BASE,
+                                gmm_mode=cfg.MODEL.FLOW.GMM_MODE,
+                                gmm_trainable=cfg.MODEL.FLOW.GMM_TRAINABLE)
         self.flow = glow.model
         self.pe = PositionalEncoding()
 
