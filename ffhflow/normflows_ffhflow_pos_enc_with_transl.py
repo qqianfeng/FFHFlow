@@ -141,7 +141,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         # 2. Compute NLL loss
         if self.prob_backbone:
-            cond_mean, cond_var, conditioning_feats = self.backbone(batch, return_mean_var=True)
+            cond_mean, cond_logvar, conditioning_feats = self.backbone(batch, return_mean_var=True)
         else:
             conditioning_feats = self.backbone(batch, return_mean_var=True)
 
@@ -165,8 +165,8 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         # Compute KL divergence between shape posterior and prior
         if self.prob_backbone:
-            kl_nll = gaussian_nll(conditioning_feats, cond_mean, cond_var) 
-            kl_ent = gaussian_ent(cond_var)
+            kl_nll = gaussian_nll(conditioning_feats, cond_mean, cond_logvar) 
+            kl_ent = gaussian_ent(cond_logvar)
             kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * kl_nll - self.cfg.LOSS_WEIGHTS['KL_ENT'] * kl_ent
             loss += kl_loss
 
@@ -224,9 +224,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         Returns:
             Dict: Dictionary containing regression output.
         """
-        output = self.forward_step(batch, train=False)
+        output = {} # self.forward_step(batch, train=False)
         loss = self.compute_loss(batch, output, train=False)
-        output['loss'] = loss
+        # output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
         return output

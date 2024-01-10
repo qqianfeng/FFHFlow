@@ -23,9 +23,7 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
                                 flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
                                 res_num_layers=cfg.MODEL.FLOW.LAYER_DEPTH,
                                 context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                base=cfg.MODEL.FLOW.BASE,
-                                gmm_mode=cfg.MODEL.FLOW.GMM_MODE,
-                                gmm_trainable=cfg.MODEL.FLOW.GMM_TRAINABLE)
+                                flow_config=cfg.MODEL.FLOW)
         self.flow = glow.model
         self.pe = PositionalEncoding()
 

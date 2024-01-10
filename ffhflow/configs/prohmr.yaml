@@ -1,4 +1,4 @@
-NAME: test_lvm_cond_gaussian
+NAME: test_lvm_cond_rsb
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -10,7 +10,7 @@ DATASETS:
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 300000 # 300000 #100000 for train with nll and second 100000 for fintune
+  TOTAL_STEPS: 200000 # 300000 #100000 for train with nll and second 100000 for fintune
   LOG_STEPS: 100
   VAL_STEPS: 100
   # CHECKPOINT_STEPS: 100
@@ -32,7 +32,7 @@ LOSS_WEIGHTS:
   ORTHOGONAL: 0.1
   NLL: 1
   KL_NLL: 1
-  KL_ENT: 1
+  KL_ENT: 2
   NLL_POS: 1
   NLL_NEG: 1
   ROT: 0.1 # TODO: to be tuned
@@ -43,7 +43,13 @@ MODEL:
     LATENT_DIM: 5  #FFHGenerator
     PROBABILISTIC: True
   FLOW:
-    BASE: "cond_gaussian" # gmm, gaussian
+    BASE: "cond_rsb" # gmm, gaussian, cond_gaussian, cond_rsb
+    # RSB related
+    RSB_EPS: 0.01
+    RSB_T: 100 
+    RSB_ACC_HIDDEN: 128
+    RSB_ACC_LAYES: 3
+    # GMM related
     GMM_MODE: 1
     GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
