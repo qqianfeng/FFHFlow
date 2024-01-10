@@ -67,13 +67,14 @@ with torch.no_grad():
     print('transl_loss_sum:', transl_loss_sum)
     print('rot_loss_sum:', rot_loss_sum)
     print('joint_loss_sum:', joint_loss_sum)
+    
 ###########################
 
-def pth_correction(old_pth):
-    new_path = old_pth.replace("/data/hdd1/qf/hithand_data/ffhnet-data/eval/pcd/", "/data/net/userstore/qf/hithand_data/data/ffhnet-data/eval/pcd/")
-    return new_path
-
 #### VISUALIZATION #####
+# def pth_correction(old_pth):
+#     new_path = old_pth.replace("/data/hdd1/qf/hithand_data/ffhnet-data/eval/pcd/", "/data/net/userstore/qf/hithand_data/data/ffhnet-data/eval/pcd/")
+#     return new_path
+
 # print(len(val_loader))
 # with torch.no_grad():
 #     batch = load_batch('eval_batch.pth')
