@@ -15,6 +15,7 @@ from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEnc
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
+parser.add_argument('--resume_ckp', type=str, default=None, help='Directory to checkpoints to be resumed')
 
 args = parser.parse_args()
 
@@ -38,7 +39,7 @@ checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = 'checkpoints/normflow_affine_old_best_param_gmm2_trainable/epoch=17-step=209999.ckpt'
+ckpt_path = args.resume_ckp # 'checkpoints/test_lvm1/epoch=12-step=149999.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -52,8 +53,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      precision=16,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
-                     callbacks=[checkpoint_callback])
-                    #  resume_from_checkpoint=ckpt_path)
+                     callbacks=[checkpoint_callback],
+                     resume_from_checkpoint=ckpt_path)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
