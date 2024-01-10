@@ -14,8 +14,6 @@ from .backbones import BPSMLP
 from .heads import NormflowsGraspFlowPosEncWithTransl
 from .utils.losses import kl_divergence, rot_6D_l2_loss, transl_l2_loss, gaussian_nll, gaussian_ent
 
-
-
 class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
     def __init__(self, cfg: CfgNode):
@@ -97,11 +95,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             new_joint_conf = torch.zeros((batch['joint_conf'].shape[0],16)).to('cuda')
             new_joint_conf[:,:15] = batch['joint_conf']
             batch['joint_conf'] = new_joint_conf
+
         # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
-        if self.prob_backbone:
-            cond_mean, cond_var, conditioning_feats = self.backbone(batch, return_mean_var=True)
-        else:
-            conditioning_feats = self.backbone(batch, return_mean_var=True)
+        conditioning_feats = self.backbone(batch)
 
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
@@ -116,10 +112,6 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
         output['conditioning_feats'] = conditioning_feats
-        if self.prob_backbone:
-            output['conditioning_mean'] = cond_mean
-            output['conditioning_var'] = cond_var
-
         return output
 
     def compute_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
@@ -134,23 +126,29 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
 
         # 1. Reconstruction loss
-        pred_angles = output['pred_angles'].view(-1,3)
-        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
-        pred_joint_conf = pred_joint_conf[:,:15]
-        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
-        gt_transl = batch['transl']
-        gt_joint_conf = batch['joint_conf'][:,:15]
-        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
-        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
-        joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
+        # pred_angles = output['pred_angles'].view(-1,3)
+        # pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        # pred_joint_conf = output['pred_joint_conf'].view(-1,16)
+        # pred_joint_conf = pred_joint_conf[:,:15]
+        # gt_angles = batch['angle_vector']  # [batch_size, 3,3]
+        # gt_transl = batch['transl']
+        # gt_joint_conf = batch['joint_conf'][:,:15]
+        # rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        # joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
 
         # TODO: add joint as loss
 
         # 2. Compute NLL loss
-        conditioning_feats = output['conditioning_feats']
+        if self.prob_backbone:
+            cond_mean, cond_var, conditioning_feats = self.backbone(batch, return_mean_var=True)
+        else:
+            conditioning_feats = self.backbone(batch, return_mean_var=True)
 
         # grasp -> z
+        if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
+            padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
+            batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
@@ -167,18 +165,17 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         # Compute KL divergence between shape posterior and prior
         if self.prob_backbone:
-            kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * gaussian_nll(output['conditioning_feats'], output['conditioning_mean'], output['conditioning_var']) 
-            kl_loss -= self.cfg.LOSS_WEIGHTS['KL_ENT'] * gaussian_ent(output['conditioning_var'])
+            kl_nll = gaussian_nll(conditioning_feats, cond_mean, cond_var) 
+            kl_ent = gaussian_ent(cond_var)
+            kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * kl_nll - self.cfg.LOSS_WEIGHTS['KL_ENT'] * kl_ent
             loss += kl_loss
 
         output['losses'] = dict(loss=loss.detach(),
                                 loss_nll=loss_nll.detach(),
-                                rot_loss=rot_loss.detach(),
-                                joint_conf_loss=joint_conf_loss.detach(),
-                                transl_loss=transl_loss.detach())
+                                kl_nll=kl_nll.detach(),
+                                kl_ent=kl_ent.detach(),
+                                kl_loss=kl_loss.detach())
                                 # loss_pose_6d=loss_pose_6d.detach(),
-
-        # output['losses'] = losses
 
         return loss
 
@@ -205,8 +202,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
         batch = joint_batch
         optimizer = self.optimizers(use_pl_optimizer=True)
-        output = self.forward_step(batch, train=True)
-
+        output = {} # self.forward_step(batch, train=True)
         loss = self.compute_loss(batch, output, train=True)
 
         optimizer.zero_grad()

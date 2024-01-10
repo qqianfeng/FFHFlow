@@ -1,4 +1,4 @@
-NAME: test_lvm1
+NAME: test_lvm_cond_gaussian
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -43,7 +43,7 @@ MODEL:
     LATENT_DIM: 5  #FFHGenerator
     PROBABILISTIC: True
   FLOW:
-    BASE: "gaussian" # gmm, gaussian
+    BASE: "cond_gaussian" # gmm, gaussian
     GMM_MODE: 1
     GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)

@@ -1,6 +1,6 @@
 import torch 
 import numpy as np
-from .utils import utils
+from .utils import rot_matrix_from_ortho6d
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -41,7 +41,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     Returns:
         _type_: _description_
     """
-    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_rot_6D, device=device)  # batch_size*3*3
+    pred_rot_matrix = rot_matrix_from_ortho6d(pred_rot_6D, device=device)  # batch_size*3*3
     pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
     gt_rot_matrix = gt_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
     # l2 loss on rotation matrix
