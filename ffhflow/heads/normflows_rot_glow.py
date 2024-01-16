@@ -4,7 +4,6 @@
 # Import required packages
 import torch
 from torch import nn
-import torchvision as tv
 import numpy as np
 import sys
 import os
@@ -12,6 +11,8 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 import normflows as nf
 from normflows.distributions import BaseDistribution
+from normflows.flows import AffineCouplingBlock, InvertibleAffine, ActNorm
+from normflows import nets
 
 # torchutils from nflows package
 def sum_except_batch(x, num_batch_dims=1):
@@ -24,6 +25,24 @@ def split_leading_dim(x, shape):
     new_shape = torch.Size(shape) + x.shape[1:]
     return torch.reshape(x, new_shape)
         
+
+def merge_leading_dims(x, num_dims):
+    """Reshapes the tensor `x` such that the first `num_dims` dimensions are merged to one."""
+    if num_dims > x.dim():
+        raise ValueError(
+            "Number of leading dims can't be greater than total number of dims."
+        )
+    new_shape = torch.Size([-1]) + x.shape[num_dims:]
+    return torch.reshape(x, new_shape)
+
+
+def repeat_rows(x, num_reps):
+    """Each row of tensor `x` is repeated `num_reps` times along leading dimension."""
+    shape = x.shape
+    x = x.unsqueeze(1)
+    x = x.expand(shape[0], num_reps, *shape[1:])
+    return merge_leading_dims(x, num_dims=2)
+
 class CondResampledGaussian(BaseDistribution):
     """
     Multivariate Gaussian distribution with diagonal covariance matrix,
@@ -158,7 +177,7 @@ class ResampledDistribution(BaseDistribution):
         self.bs_factor = bs_factor
         self.register_buffer("Z", torch.tensor(-1.))
 
-    def forward(self, context=None, num_samples=1):
+    def forward(self,  num_samples, context=None):
         t = 0
         z = None
         log_p_dist = None
@@ -235,7 +254,138 @@ class ResampledDistribution(BaseDistribution):
                 self.Z = self.Z + Z_batch.detach() / num_batches
 
 
+class GlowBlock(nf.flows.Flow):
+    """Glow: Generative Flow with Invertible 1x1 Convolutions, [arXiv: 1807.03039](https://arxiv.org/abs/1807.03039)
+
+    One Block of the Glow model, comprised of
+
+    - MaskedAffineFlow (affine coupling layer)
+    - Invertible1x1Conv (dropped if there is only one channel)
+    - ActNorm (first batch used for initialization)s
+    """
+
+    def __init__(
+        self,
+        input_dim,
+        hidden_dim,
+        num_blocks,
+        scale=True,
+        scale_map="sigmoid",
+        split_mode="channel",
+        use_lu=True,
+        leaky=0.0,
+        init_zeros=True,
+        net_actnorm=False,
+    ):
+        super().__init__()
+        self.flows = nn.ModuleList([])
+
+        # Coupling layer -> TODO: Do we need this???
+        num_param = 2 if scale else 1
+        channels = input_dim
+        hidden_channels = hidden_dim
+        if "channel" == split_mode:
+            channels_ = ((channels + 1) // 2,) + 2 * (hidden_channels,)
+            channels_ += (num_param * (channels // 2),)
+        elif "channel_inv" == split_mode:
+            channels_ = (channels // 2,) + 2 * (hidden_channels,)
+            channels_ += (num_param * ((channels + 1) // 2),)
+        elif "checkerboard" in split_mode:
+            channels_ = (channels,) + 2 * (hidden_channels,)
+            channels_ += (num_param * channels,)
+        else:
+            raise NotImplementedError("Mode " + split_mode + " is not implemented.")
+        # Because we don't use multi scale so first value from chennels_ is enough for us to use
+        param_map = nets.ResidualNet(in_features=channels_[0], 
+                                     out_features=input_dim, 
+                                     hidden_features=hidden_dim,
+                                     num_blocks=num_blocks)
+
+        self.flows += [AffineCouplingBlock(param_map, scale, scale_map, split_mode)]
+        # Invertible 1x1 convolution
+        self.flows += [InvertibleAffine(input_dim, use_lu)]
+        # Activation normalization
+        # Modified according to glow in nflow
+        self.flows += [ActNorm([input_dim])]
+
+    def forward(self, z, context=None):
+        log_det_tot = torch.zeros(z.shape[0], dtype=z.dtype, device=z.device)
+        if z.shape[0] != context.shape[0]:
+            context = repeat_rows(context, num_reps=z.shape[0]//context.shape[0])
+        for flow in self.flows:
+            if str(flow) == 'ActNorm()':
+                z, log_det = flow(z)
+            elif str(flow) == 'InvertibleAffine()':
+                z, log_det = flow(z)
+            else:
+                z, log_det = flow(z, context)
+            log_det_tot += log_det
+        return z, log_det_tot
+
+    def inverse(self, z, context=None):
+        log_det_tot = torch.zeros(z.shape[0], dtype=z.dtype, device=z.device)
+        for i in range(len(self.flows) - 1, -1, -1):
+            if str(self.flows[i]) == 'ActNorm()':
+                z, log_det = self.flows[i].inverse(z)
+            elif str(self.flows[i]) == 'InvertibleAffine()':
+                z, log_det = self.flows[i].inverse(z)
+            else:
+                z, log_det = self.flows[i].inverse(z, context)
+            log_det_tot += log_det
+        return z, log_det_tot
+
+
 # Set up model
+class Glow():
+    def __init__(self,
+                 input_dim,
+                 hidden_dim,
+                 flow_layers,
+                 res_num_layers,
+                 flow_config=None
+                 ) -> None:
+
+        if flow_config is None:
+            base = "gaussian"
+        else:
+            gmm_mode=flow_config.GMM_MODE,
+            gmm_trainable=flow_config.GMM_TRAINABLE
+
+        # Define flows
+        torch.manual_seed(0)
+        split_mode = 'channel'
+        # True is affine / False is addctive
+        scale = True
+
+        # # Construct flow model with the multiscale architecture
+        # model = nf.MultiscaleFlow(q0, flows, merges)
+        flows = []
+        for _ in range(flow_layers):
+            flows += [GlowBlock(input_dim=input_dim,
+                                hidden_dim=hidden_dim,
+                                num_blocks=res_num_layers,
+                                split_mode=split_mode, 
+                                scale=scale)]
+            
+        # gmm base
+        if base == "gmm":
+            q0 = nf.distributions.GaussianMixture(n_modes=gmm_mode,
+                                                  dim=input_dim,
+                                                  loc=np.zeros((1,input_dim)),
+                                                  trainable=gmm_trainable)
+        elif base == "gaussian":
+            q0 = nf.distributions.StandardNormal(shape=input_dim)
+        else:
+            raise NotImplementedError(f"{base} is NOT implemented, only gaussian and gmm are available.")
+
+        # Construct flow model with the multiscale architecture
+        model = nf.NormalizingFlow(q0, flows)
+        
+        # Move model on GPU if available
+        enable_cuda = True
+        device = torch.device('cuda' if torch.cuda.is_available() and enable_cuda else 'cpu')
+        self.model = model.to(device)
+                
 class ConditionalGlow():
     def __init__(self,
                  input_dim,
@@ -246,13 +396,16 @@ class ConditionalGlow():
                  flow_config,
                  ) -> None:
 
-        base = flow_config.BASE
-        gmm_mode=flow_config.GMM_MODE,
-        gmm_trainable=flow_config.GMM_TRAINABLE
-        rsb_T = flow_config.RSB_T
-        rsb_eps = flow_config.RSB_EPS
-        rsb_acc_hidden = flow_config.RSB_ACC_HIDDEN   
-        rsb_acc_layers = flow_config.RSB_ACC_LAYES
+        if flow_config is None:
+            base = "gaussian"
+        else:
+            base = flow_config.BASE
+            gmm_mode=flow_config.GMM_MODE,
+            gmm_trainable=flow_config.GMM_TRAINABLE
+            rsb_T = flow_config.RSB_T
+            rsb_eps = flow_config.RSB_EPS
+            rsb_acc_hidden = flow_config.RSB_ACC_HIDDEN   
+            rsb_acc_layers = flow_config.RSB_ACC_LAYES
 
         # Define flows
         torch.manual_seed(0)
@@ -263,9 +416,8 @@ class ConditionalGlow():
 
         # # Construct flow model with the multiscale architecture
         # model = nf.MultiscaleFlow(q0, flows, merges)
-        q0 = []
         flows = []
-        for j in range(flow_layers):
+        for _ in range(flow_layers):
             flows += [nf.flows.ConditionalGlowBlock(input_dim=input_dim, # 4
                                                         hidden_dim=hidden_channels,
                                                         context_feature=context_features,
@@ -280,7 +432,7 @@ class ConditionalGlow():
             context_encoder = nn.Linear(context_features, int(input_dim*2))
             context_encoder.cuda()
             q0 = nf.distributions.ConditionalDiagGaussian(shape=input_dim, context_encoder=context_encoder)
-        elif base == "cond_rsb": #TODO  
+        elif base == "cond_rsb":   
             context_encoder = nn.Linear(context_features, int(input_dim*2))
             context_encoder.cuda()
             layers = [input_dim]
@@ -290,8 +442,10 @@ class ConditionalGlow():
             acceptance_func.cuda()
             proposal_dist = nf.distributions.ConditionalDiagGaussian(shape=input_dim, context_encoder=context_encoder)
             q0 = ResampledDistribution(dist=proposal_dist, a=acceptance_func, T=rsb_T, eps=rsb_eps)
-        else:
+        elif base == "gaussian":
             q0 = nf.distributions.StandardNormal(shape=input_dim)
+        else:
+            raise NotImplementedError(f"The base distribution of {base} has not been implemented.")
 
         # Construct flow model with the multiscale architecture
         model = nf.ConditionalNormalizingFlow(q0, flows)

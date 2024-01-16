@@ -1,4 +1,4 @@
-NAME: test_lvm_cond_rsb
+NAME: test_lvm_cond_gaussian_prior_flow_lr1e-5
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -17,22 +17,20 @@ GENERAL:
   NUM_WORKERS: 8
 
 TRAIN:
-  LR: 1e-4
-  # WEIGHT_DECAY: 1e-4
+  LR: 1e-5
+  WEIGHT_DECAY: 0.0005
   BATCH_SIZE: 64
   LOSS_REDUCTION: mean
   NUM_TRAIN_SAMPLES: 1
   NUM_TEST_SAMPLES: 1
-  # from ffhnet
   BETA1: 0.9
-  WEIGHT_DECAY: 0.0005
 
 LOSS_WEIGHTS:
   C: -1e4  # truncate value for loss_neg_nll
   ORTHOGONAL: 0.1
   NLL: 1
   KL_NLL: 1
-  KL_ENT: 2
+  KL_ENT: 1
   NLL_POS: 1
   NLL_NEG: 1
   ROT: 0.1 # TODO: to be tuned
@@ -40,10 +38,14 @@ LOSS_WEIGHTS:
 
 MODEL:
   BACKBONE:
-    LATENT_DIM: 5  #FFHGenerator
+    # LATENT_DIM: 5  #FFHGenerator
     PROBABILISTIC: True
+    PRIOR_FLOW: True
+    PRIOR_FLOW_NUM_LAYERS: 4 # numbers of flow layers about [Actnorm, LULinear, Coupling]
+    PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 256
+    PRIOR_FLOW_LAYER_DEPTH: 2 # number of resblock in resnet
   FLOW:
-    BASE: "cond_rsb" # gmm, gaussian, cond_gaussian, cond_rsb
+    BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     # RSB related
     RSB_EPS: 0.01
     RSB_T: 100 
@@ -55,8 +57,8 @@ MODEL:
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
     DIM: 136 # input dims, also the same dim for base distribution of standard norm
-    NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
+    NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
     LAYER_DEPTH: 4 # number of resblock in resnet
 
