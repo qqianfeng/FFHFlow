@@ -189,8 +189,12 @@ class BPSMLP(nn.Module):
     
     def sample(self, mu, logvar):
         assert self.prob_flag, "Only avaialble when cfg.MODEL.BACKBONE.PROBABILISTIC is True."
-        std = logvar.exp().pow(0.5)
-        q_z = torch.distributions.normal.Normal(mu, std)
-        z = q_z.rsample()
-        return z
+        # std = logvar.exp().pow(0.5)
+        # q_z = torch.distributions.normal.Normal(mu, std)
+        # z = q_z.rsample()
+        # return z
+    
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
     
