@@ -273,9 +273,6 @@ class GlowBlock(nf.flows.Flow):
         scale_map="sigmoid",
         split_mode="channel",
         use_lu=True,
-        leaky=0.0,
-        init_zeros=True,
-        net_actnorm=False,
     ):
         super().__init__()
         self.flows = nn.ModuleList([])

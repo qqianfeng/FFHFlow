@@ -1,10 +1,61 @@
 import torch
 import torch.nn as nn
 from typing import Optional, Dict, Tuple
-from .normflows_rot_glow import ConditionalGlow
+import normflows as nf
+from .normflows_rot_glow import ConditionalGlow, Glow
 from yacs.config import CfgNode
 
 from .local_inn import PositionalEncoding
+
+class PriorFlow(nn.Module):
+    def __init__(self, cfg: CfgNode):
+        super().__init__()
+        self.prior_flow_grasp_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_GRASP_COND 
+        if self.prior_flow_grasp_cond:
+            self.grasp_nn = nf.nets.ResidualNet(cfg.MODEL.FLOW.DIM, 64, 128)
+            cond_glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
+                                    hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
+                                    flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
+                                    res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
+                                    context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
+                                    flow_config=None)
+            self.flow = cond_glow.model
+        else:
+            glow = Glow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
+                        hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
+                        flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
+                        res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
+                        flow_config=None)
+            self.flow = glow.model
+
+    def log_prob(self, cond_feats: torch.Tensor, grasp_batch: torch.Tensor = None) -> Tuple:
+        # batch_size = cond_feats.shape[0]
+        # cond_feats = cond_feats.reshape(batch_size, -1)
+        # grasp -> z
+        if grasp_batch is None:
+            log_prob = self.flow.log_prob(cond_feats)
+            return log_prob
+        else:
+            batch_size = cond_feats.shape[0]
+            # input of positional encoded angles
+            angles = grasp_batch['angle_vector']  # [batch_size,3,3]
+            angles = self.pe.forward_localinn(angles)
+            angles = angles.reshape(batch_size, -1).to(feats.dtype)
+
+            transl = grasp_batch['transl']
+            transl = self.pe.forward_transl(transl)
+            transl = transl.reshape(batch_size, -1).to(feats.dtype)
+
+            joint_conf = grasp_batch['joint_conf']
+
+            joint_conf = joint_conf.reshape(batch_size, -1).to(feats.dtype)
+            feats = torch.cat([angles, transl, joint_conf],dim=1)
+            feats = feats.reshape(batch_size, -1)
+            grasp_feats = self.grasp_nn(feats)
+            log_prob, z = self.flow.log_prob(cond_feats, grasp_feats)
+            # log_prob = log_prob.reshape(batch_size, 1)
+            # z = z.reshape(batch_size, 1, -1)
+            return log_prob, z
 
 class NormflowsGraspFlowPosEncWithTransl(nn.Module):
     """

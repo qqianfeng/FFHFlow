@@ -1,4 +1,4 @@
-NAME: test_lvm_cond_gaussian_prior_flow_lr1e-5
+NAME: test_lvm_cond_gaussian_prior_flow_0.01_10k
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -17,8 +17,9 @@ GENERAL:
   NUM_WORKERS: 8
 
 TRAIN:
-  LR: 1e-5
-  WEIGHT_DECAY: 0.0005
+  OPT: AdamW # SGD, AdamW
+  LR: 1e-4
+  WEIGHT_DECAY: 0.0005 # 0.0005
   BATCH_SIZE: 64
   LOSS_REDUCTION: mean
   NUM_TRAIN_SAMPLES: 1
@@ -40,7 +41,9 @@ MODEL:
   BACKBONE:
     # LATENT_DIM: 5  #FFHGenerator
     PROBABILISTIC: True
+    # PRIOR FLOW related
     PRIOR_FLOW: True
+    PRIOR_FLOW_GRASP_COND: False
     PRIOR_FLOW_NUM_LAYERS: 4 # numbers of flow layers about [Actnorm, LULinear, Coupling]
     PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 256
     PRIOR_FLOW_LAYER_DEPTH: 2 # number of resblock in resnet

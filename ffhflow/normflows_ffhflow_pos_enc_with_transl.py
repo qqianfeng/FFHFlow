@@ -7,14 +7,14 @@ import transforms3d
 from yacs.config import CfgNode
 import normflows as nf
 
-from ffhflow.utils.train_utils import clip_grad_norm
+# from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
 from .backbones import BPSMLP
-from .heads import NormflowsGraspFlowPosEncWithTransl
-from .heads.normflows_rot_glow import ConditionalGlow, Glow
+from .heads import NormflowsGraspFlowPosEncWithTransl, PriorFlow
 from .utils.losses import gaussian_nll, gaussian_ent
+
 
 class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
@@ -29,7 +29,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         self.cfg = cfg
         self.prob_backbone = cfg.MODEL.BACKBONE.PROBABILISTIC
         self.prior_flow_flag = cfg.MODEL.BACKBONE.PRIOR_FLOW
-        self.prior_flow_grasp_cond = False
+        self.prior_flow_grasp_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_GRASP_COND 
 
         # Create backbone feature extractor
         # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
@@ -41,22 +41,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
         if self.prior_flow_flag:
-            if self.prior_flow_grasp_cond:
-                self.grasp_extract_nn = nf.nets.ResidualNet(cfg.MODEL.FLOW.DIM, 64, 128)
-                cond_glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                        hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
-                                        flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
-                                        res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
-                                        context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                        flow_config=None)
-                self.prior_flow = cond_glow.model
-            else:
-                glow = Glow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                            hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
-                            flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
-                            res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
-                            flow_config=None)
-                self.prior_flow = glow.model
+            self.prior_flow = PriorFlow(cfg)
         else:
             self.prior_flow = None
 
@@ -74,13 +59,21 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         Returns:
             Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Model and discriminator optimizers
         """
-        optimizer = torch.optim.AdamW(params=list(self.backbone.parameters()) + list(self.flow.parameters()),
-                                        lr=self.cfg.TRAIN.LR,
-                                        betas=(self.cfg.TRAIN.BETA1, 0.999),
-                                        weight_decay=self.cfg.TRAIN.WEIGHT_DECAY)
-        # optimizer = torch.optim.SGD(params=list(self.backbone.parameters()) + list(self.flow.parameters()),
-        #                         lr=self.cfg.TRAIN.LR,
-        #                         momentum=0.9)
+        trainable_params = list(self.backbone.parameters()) + \
+                           list(self.flow.parameters())
+                           
+        if self.prior_flow_flag: 
+            trainable_params += list(self.prior_flow.parameters())
+        
+        if self.cfg.TRAIN.OPT == "AdamW":
+            optimizer = torch.optim.AdamW(params=trainable_params,
+                                            lr=self.cfg.TRAIN.LR,
+                                            betas=(self.cfg.TRAIN.BETA1, 0.999),
+                                            weight_decay=self.cfg.TRAIN.WEIGHT_DECAY)
+        elif self.cfg.TRAIN.OPT == "SGD":
+            optimizer = torch.optim.SGD(params=trainable_params,
+                                    lr=self.cfg.TRAIN.LR,
+                                    momentum=0.9)
 
         return optimizer
 
@@ -96,6 +89,12 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         with torch.no_grad():
             _, _ = self.flow.log_prob(batch, conditioning_feats)
+            if self.prior_flow_flag:
+                if self.prior_flow_grasp_cond:
+                    _ = self.prior_flow.log_prob(conditioning_feats, batch)
+                else:
+                    _ = self.prior_flow.log_prob(conditioning_feats)
+
             self.initialized = True
 
     def forward_step(self, batch: Dict, train: bool = False) -> Dict:
@@ -165,14 +164,14 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         if self.prob_backbone:
             cond_mean, cond_logvar, conditioning_feats = self.backbone(batch, return_mean_var=True)
         else:
-            conditioning_feats = self.backbone(batch, return_mean_var=True)
+            conditioning_feats = self.backbone(batch)
 
         # grasp -> z
         if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
             padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
             batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
-        loss_nll = -log_prob.mean()
+        grasp_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
         # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
@@ -180,31 +179,37 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
         # combine all the losses
-        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll 
-                # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
-                #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-                #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+        # loss = self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll 
+        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+        #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+
+        def update_kl_cof(interval=5000):
+            kl_cof = 0.01 * (self.global_step // interval) 
+            if kl_cof > 1.:
+                kl_cof = 1.0                
+            return kl_cof
 
         # Compute KL divergence between shape posterior and prior
         if self.prob_backbone:
             # add prior flow nll into kl_nll
             if self.prior_flow_flag: 
                 if self.prior_flow_grasp_cond: 
-                    batch_grasps = 0.
-                    grasp_feats = self.grasp_extract_nn(batch_grasps)
-                    kl_ll, z = self.prior_flow.log_prob(conditioning_feats, grasp_feats)
+                    kl_ll, z = self.prior_flow.log_prob(conditioning_feats, batch)
                     kl_nll = -kl_ll
                 else:
-                    kl_nll = -self.prior_flow.log_prob(conditioning_feats)
-                    kl_nll = kl_nll.mean()
+                    kl_ll = self.prior_flow.log_prob(conditioning_feats)
+                    kl_nll = -kl_ll.mean()
             else:
                 kl_nll = gaussian_nll(conditioning_feats, cond_mean, cond_logvar) 
+
             kl_ent = gaussian_ent(cond_logvar)
             kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * kl_nll - self.cfg.LOSS_WEIGHTS['KL_ENT'] * kl_ent
-            loss += kl_loss
+            kl_cof = update_kl_cof(interval=1e4)
+            loss = kl_cof * kl_loss + self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll 
 
         output['losses'] = dict(loss=loss.detach(),
-                                loss_nll=loss_nll.detach(),
+                                grasp_nll=grasp_nll.detach(),
                                 kl_nll=kl_nll.detach(),
                                 kl_ent=kl_ent.detach(),
                                 kl_loss=kl_loss.detach())
