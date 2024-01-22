@@ -9,7 +9,7 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_Grasp
 
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -27,13 +27,28 @@ logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', ve
 
 # Set up model
 # model = FFHFlow(cfg)
-model = NormflowsFFHFlowPosEncWithTransl(cfg)
+# model = NormflowsFFHFlowPosEncWithTransl(cfg)
+model = NormflowsFFHFlowPosEncWithTransl_Grasp(cfg)
 
 # Setup checkpoint saving
-checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, cfg['NAME']),
+save_folder = os.path.join(args.root_dir, cfg['NAME'])
+checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=save_folder,
                         every_n_train_steps=10000,
                         save_top_k=-1)
+
+# copy the config file to save_dir
+if not os.path.exists(save_folder):
+    os.mkdir(save_folder)
+else: # remove tf files only for better monitoring in tensorboard
+    files = os.listdir(save_folder)
+    for f in files:
+        if "events.out.tfevents" in f:
+            os.remove(os.path.join(save_folder, f))
+
+fname = os.path.join(save_folder, 'hparams.yaml')
+if os.path.isfile(fname):
+    os.remove(fname)
+shutil.copy(args.model_cfg, fname)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
@@ -58,10 +73,3 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
-
-# copy the config file to save_dir
-fname = os.path.join(args.root_dir, cfg['NAME'], 'hparams.yaml')
-if os.path.isfile(fname):
-    os.remove(fname)
-
-shutil.copy(args.model_cfg, fname)

@@ -8,54 +8,46 @@ from yacs.config import CfgNode
 from .local_inn import PositionalEncoding
 
 class PriorFlow(nn.Module):
-    def __init__(self, cfg: CfgNode):
+    def __init__(self, 
+                 cfg: CfgNode):
         super().__init__()
-        self.prior_flow_grasp_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_GRASP_COND 
-        if self.prior_flow_grasp_cond:
-            self.grasp_nn = nf.nets.ResidualNet(cfg.MODEL.FLOW.DIM, 64, 128)
+        self.prior_flow_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_COND 
+
+        if self.prior_flow_cond:
             cond_glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
                                     hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
                                     flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
                                     res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
-                                    context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                    flow_config=None)
+                                    context_features=cfg.MODEL.BACKBONE.PCD_ENC_HIDDEN_DIM,
+                                    base_dist=cfg.MODEL.BACKBONE.PRIOR_FLOW_BASE,
+                                    cfg=cfg)
             self.flow = cond_glow.model
         else:
             glow = Glow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
                         hidden_dim=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_HIDDEN_FEATURES,
                         flow_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_NUM_LAYERS,
                         res_num_layers=cfg.MODEL.BACKBONE.PRIOR_FLOW_LAYER_DEPTH,
-                        flow_config=None)
+                        cfg=None)
             self.flow = glow.model
 
-    def log_prob(self, cond_feats: torch.Tensor, grasp_batch: torch.Tensor = None) -> Tuple:
+    def log_prob(self, latents: torch.Tensor, cond_feats: torch.Tensor = None) -> Tuple:
         # batch_size = cond_feats.shape[0]
         # cond_feats = cond_feats.reshape(batch_size, -1)
         # grasp -> z
-        if grasp_batch is None:
-            log_prob = self.flow.log_prob(cond_feats)
+        if cond_feats is None:
+            log_prob = self.flow.log_prob(latents)
             return log_prob
         else:
-            batch_size = cond_feats.shape[0]
-            # input of positional encoded angles
-            angles = grasp_batch['angle_vector']  # [batch_size,3,3]
-            angles = self.pe.forward_localinn(angles)
-            angles = angles.reshape(batch_size, -1).to(feats.dtype)
-
-            transl = grasp_batch['transl']
-            transl = self.pe.forward_transl(transl)
-            transl = transl.reshape(batch_size, -1).to(feats.dtype)
-
-            joint_conf = grasp_batch['joint_conf']
-
-            joint_conf = joint_conf.reshape(batch_size, -1).to(feats.dtype)
-            feats = torch.cat([angles, transl, joint_conf],dim=1)
-            feats = feats.reshape(batch_size, -1)
-            grasp_feats = self.grasp_nn(feats)
-            log_prob, z = self.flow.log_prob(cond_feats, grasp_feats)
+            log_prob, z = self.flow.log_prob(latents, cond_feats)
             # log_prob = log_prob.reshape(batch_size, 1)
             # z = z.reshape(batch_size, 1, -1)
             return log_prob, z
+    
+    def sample(self, cond_feats: torch.Tensor, num_samples: Optional[int] = None,):
+        samples, log_prob = self.flow.sample(num_samples, context=cond_feats)
+        return samples, log_prob
+
+
 
 class NormflowsGraspFlowPosEncWithTransl(nn.Module):
     """
@@ -74,7 +66,8 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
                                 flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
                                 res_num_layers=cfg.MODEL.FLOW.LAYER_DEPTH,
                                 context_features=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                flow_config=cfg.MODEL.FLOW)
+                                base_dist=cfg.MODEL.FLOW.BASE,
+                                cfg=cfg)
         self.flow = glow.model
         self.pe = PositionalEncoding()
 

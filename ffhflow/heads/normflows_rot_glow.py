@@ -339,14 +339,14 @@ class Glow():
                  hidden_dim,
                  flow_layers,
                  res_num_layers,
-                 flow_config=None
+                 cfg=None
                  ) -> None:
 
-        if flow_config is None:
+        if cfg is None:
             base = "gaussian"
         else:
-            gmm_mode=flow_config.GMM_MODE,
-            gmm_trainable=flow_config.GMM_TRAINABLE
+            gmm_mode=cfg.GMM_MODE,
+            gmm_trainable=cfg.GMM_TRAINABLE
 
         # Define flows
         torch.manual_seed(0)
@@ -390,19 +390,16 @@ class ConditionalGlow():
                  flow_layers,
                  res_num_layers,
                  context_features,
-                 flow_config,
+                 base_dist,
+                 cfg,
                  ) -> None:
-
-        if flow_config is None:
-            base = "gaussian"
-        else:
-            base = flow_config.BASE
-            gmm_mode=flow_config.GMM_MODE,
-            gmm_trainable=flow_config.GMM_TRAINABLE
-            rsb_T = flow_config.RSB_T
-            rsb_eps = flow_config.RSB_EPS
-            rsb_acc_hidden = flow_config.RSB_ACC_HIDDEN   
-            rsb_acc_layers = flow_config.RSB_ACC_LAYES
+        base = base_dist
+        gmm_mode=cfg.MODEL.FLOW.GMM_MODE,
+        gmm_trainable=cfg.MODEL.FLOW.GMM_TRAINABLE
+        rsb_T = cfg.MODEL.FLOW.RSB_T
+        rsb_eps = cfg.MODEL.FLOW.RSB_EPS
+        rsb_acc_hidden = cfg.MODEL.FLOW.RSB_ACC_HIDDEN   
+        rsb_acc_layers = cfg.MODEL.FLOW.RSB_ACC_LAYES
 
         # Define flows
         torch.manual_seed(0)
