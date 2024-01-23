@@ -44,12 +44,14 @@ else: # remove tf files only for better monitoring in tensorboard
     files = os.listdir(save_folder)
     for f in files:
         if "events.out.tfevents" in f:
+            print(f"Removing {f}!!!")
             os.remove(os.path.join(save_folder, f))
 
 fname = os.path.join(save_folder, 'hparams.yaml')
-if os.path.isfile(fname):
+if os.path.isfile(fname) and args.resume_ckp is None:
+    print(f"Removing {fname}!!!")
     os.remove(fname)
-shutil.copy(args.model_cfg, fname)
+    shutil.copy(args.model_cfg, fname)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)

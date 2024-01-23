@@ -19,7 +19,7 @@ def load_batch(path):
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affine_old_best_param/hparams.yaml', help='Path to config file')
 # parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=15-step=189999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 Visualization = False

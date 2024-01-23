@@ -1,4 +1,4 @@
-NAME: flow_lvm_LinearLR1e-4_cond_base
+NAME: flow_lvm_LinearLR1e-4_cond_base_priorSmall
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -54,9 +54,9 @@ MODEL:
     PRIOR_FLOW: True
     PRIOR_FLOW_COND: True
     PRIOR_FLOW_BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
-    PRIOR_FLOW_NUM_LAYERS: 8 # numbers of flow layers about [Actnorm, LULinear, Coupling]
+    PRIOR_FLOW_NUM_LAYERS: 4 # numbers of flow layers about [Actnorm, LULinear, Coupling]
     PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 512
-    PRIOR_FLOW_LAYER_DEPTH: 4 # number of resblock in resnet
+    PRIOR_FLOW_LAYER_DEPTH: 2 # number of resblock in resnet
   FLOW:
     BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     # RSB related

@@ -562,7 +562,6 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
             optimizer = torch.optim.SGD(params=trainable_params,
                                     lr=self.cfg.TRAIN.LR,
                                     momentum=0.9)
-
         # scheduler = torch.optim.LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs=10, max_epochs=40)
         
         scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -573,7 +572,6 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         )
         opt_dict = {"optimizer": optimizer, "lr_scheduler": scheduler}
         return opt_dict
-
 
     def initialize(self, batch: Dict, conditioning_feats: torch.Tensor):
         """
