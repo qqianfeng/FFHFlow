@@ -22,7 +22,7 @@ parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affin
 parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=24-step=299999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
-Visualization = True
+Visualization = False
 
 # Set up cfg
 cfg = get_config(args.model_cfg)

@@ -21,6 +21,7 @@ args = parser.parse_args()
 
 # Set up cfg
 cfg = get_config(args.model_cfg)
+print(f"cfg: {cfg}")
 
 # Setup Tensorboard logger
 logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)

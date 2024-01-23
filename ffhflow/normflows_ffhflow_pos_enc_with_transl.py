@@ -494,6 +494,7 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         self.prior_flow_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_COND
         self.grasp_enc_flag = cfg.MODEL.BACKBONE.GRASP_ENC
         self.grasp_input_pe = cfg.MODEL.BACKBONE.GRASP_ENC_PE
+        self.warmup_steps = cfg.TRAIN.WARM_UP_STEPS
 
         # point cloud encoder
         # self.pcd_enc = PointNetfeat(global_feat=True, feature_transform=False)
@@ -562,7 +563,17 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
                                     lr=self.cfg.TRAIN.LR,
                                     momentum=0.9)
 
-        return optimizer
+        # scheduler = torch.optim.LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs=10, max_epochs=40)
+        
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=0.001,
+            end_factor=1.0,
+            total_iters=self.warmup_steps,
+        )
+        opt_dict = {"optimizer": optimizer, "lr_scheduler": scheduler}
+        return opt_dict
+
 
     def initialize(self, batch: Dict, conditioning_feats: torch.Tensor):
         """
@@ -726,6 +737,10 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         self.manual_backward(loss)
         # clip_grad_norm(optimizer, max_norm=100)
         optimizer.step()
+        if self.global_step < self.warmup_steps:
+            scheduler = self.lr_schedulers()
+            scheduler.step()
+        output["losses"].update({"lr": torch.Tensor([optimizer. param_groups[0]["lr"]])})
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
             self.tensorboard_logging(batch, output, self.global_step, train=True)
@@ -764,7 +779,7 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         losses = output['losses']
 
         for loss_name, val in losses.items():
-            summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
+            summary_writer.add_scalar(mode + '/' + loss_name, val.item(), step_count)
 
     def predict_log_prob(self, bps, grasps):
         """_summary_
