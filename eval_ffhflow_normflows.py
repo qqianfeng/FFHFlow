@@ -3,6 +3,9 @@ import torch
 import os
 import pickle
 
+import sys
+# clone this repo https://github.com/qianbot/nflows
+sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.utils.metrics import maad_for_grasp_distribution
@@ -51,6 +54,7 @@ transl_loss_sum = 0
 rot_loss_sum = 0
 joint_loss_sum = 0
 print(len(val_loader))
+num_nan_out = 0
 with torch.no_grad():
     batch = load_batch('eval_batch.pth')
     for idx in range(len(batch['obj_name'])):
@@ -60,18 +64,17 @@ with torch.no_grad():
         # out = model.sample(batch['bps_object'][idx], num_samples=100)
         out = model.sample(batch, idx, num_samples=100)
 
-
         transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
-        if not math.isnan(transl_loss):
+        if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
             transl_loss_sum += transl_loss
-        if not math.isnan(rot_loss):
             rot_loss_sum += rot_loss
-        if not math.isnan(joint_loss):
             joint_loss_sum += joint_loss
+        else:
+            num_nan_out += 1
     print('transl_loss_sum:', transl_loss_sum)
     print('rot_loss_sum:', rot_loss_sum)
     print('joint_loss_sum:', joint_loss_sum)
-
+    print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
 ###########################
 
 
