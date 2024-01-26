@@ -4,6 +4,11 @@ import shutil
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
+from lightning.pytorch import seed_everything
+
+seed_everything(42, workers=True)
+
+# sets seeds for numpy, torch and python.random.
 import sys
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
@@ -70,7 +75,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
                      callbacks=[checkpoint_callback],
-                     resume_from_checkpoint=ckpt_path)
+                     resume_from_checkpoint=ckpt_path,
+                     deterministic=True)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
