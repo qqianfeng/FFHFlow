@@ -1,4 +1,4 @@
-NAME: flow_lvm_LinearLR1e-4_cond_base
+NAME: flow_lvm_1e-5_no_cond
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -18,8 +18,8 @@ GENERAL:
 
 TRAIN:
   OPT: AdamW # SGD, AdamW
-  LR: 1e-4
-  WARM_UP_STEPS: 50000
+  LR: 1e-5
+  WARM_UP_STEPS: 0
   WEIGHT_DECAY: 0.0005 # 0.0005
   BATCH_SIZE: 64
   LOSS_REDUCTION: mean
@@ -53,12 +53,12 @@ MODEL:
     # PRIOR FLOW related
     PRIOR_FLOW: True
     PRIOR_FLOW_COND: True
-    PRIOR_FLOW_BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
+    PRIOR_FLOW_BASE: "gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     PRIOR_FLOW_NUM_LAYERS: 8 # numbers of flow layers about [Actnorm, LULinear, Coupling]
     PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 512
     PRIOR_FLOW_LAYER_DEPTH: 4 # number of resblock in resnet
   FLOW:
-    BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
+    BASE: "gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     # RSB related
     RSB_EPS: 0.01
     RSB_T: 100 

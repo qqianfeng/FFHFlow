@@ -564,14 +564,16 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
                                     momentum=0.9)
 
         # scheduler = torch.optim.LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs=10, max_epochs=40)
-        
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=0.001,
-            end_factor=1.0,
-            total_iters=self.warmup_steps,
-        )
-        opt_dict = {"optimizer": optimizer, "lr_scheduler": scheduler}
+        if self.warmup_steps > 0: 
+            scheduler = torch.optim.lr_scheduler.LinearLR(
+                optimizer,
+                start_factor=0.001,
+                end_factor=1.0,
+                total_iters=self.warmup_steps,
+            )
+            opt_dict = {"optimizer": optimizer, "lr_scheduler": scheduler}
+        else:
+            opt_dict = {"optimizer": optimizer}
         return opt_dict
 
 
@@ -638,7 +640,7 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         total_steps = self.cfg.GENERAL.TOTAL_STEPS
         w_start = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_START
         w_end = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_END
-        increment = (w_end - w_start) / (total_steps)
+        increment = (w_end - w_start) / (2*total_steps)
         kl_cof = w_start + self.global_step * increment
         return kl_cof
 
@@ -737,9 +739,10 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         self.manual_backward(loss)
         # clip_grad_norm(optimizer, max_norm=100)
         optimizer.step()
-        if self.global_step < self.warmup_steps:
-            scheduler = self.lr_schedulers()
-            scheduler.step()
+        if self.warmup_steps > 0:
+            if self.global_step < self.warmup_steps:
+                scheduler = self.lr_schedulers()
+                scheduler.step()
         output["losses"].update({"lr": torch.Tensor([optimizer. param_groups[0]["lr"]])})
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
