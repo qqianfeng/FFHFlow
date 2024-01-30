@@ -25,8 +25,8 @@ parser.add_argument('--model_cfg', type=str, default='checkpoints/normflow_affin
 parser.add_argument('--ckpt_path', type=str, default='checkpoints/normflow_affine_old_best_param/epoch=15-step=189999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
-Metrics = False
-Visualization = True
+Metrics = True
+Visualization = False
 
 # Set up cfg
 cfg = get_config(args.model_cfg)
@@ -64,7 +64,7 @@ if Metrics:
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
-            # out = model.sample(batch, idx, num_samples=200)
+            out = model.sample(batch, idx, num_samples=100)
 
 
             transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
