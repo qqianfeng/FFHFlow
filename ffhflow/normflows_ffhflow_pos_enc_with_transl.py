@@ -640,7 +640,7 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         total_steps = self.cfg.GENERAL.TOTAL_STEPS
         w_start = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_START
         w_end = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_END
-        increment = (w_end - w_start) / (2*total_steps)
+        increment = (w_end - w_start) / (total_steps) # (2*total_steps)
         kl_cof = w_start + self.global_step * increment
         return kl_cof
 
