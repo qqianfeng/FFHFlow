@@ -1,9 +1,13 @@
-import os
+import os, time
 import argparse
 import shutil
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
+
+pl.seed_everything(42, workers=True)
+
+# sets seeds for numpy, torch and python.random.
 import sys
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
@@ -19,13 +23,29 @@ parser.add_argument('--resume_ckp', type=str, default=None, help='Directory to c
 
 args = parser.parse_args()
 
+def crete_logging_file(log_folder):
+    # time_str = time.ctime().replace(" ", "")
+    time_str = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    log_file = f"{log_folder}/{time_str}.txt"
+    os.system(f"echo 'Host:' $(hostname) | tee -a {log_file}")
+    os.system(f"echo 'Conda:' $(which conda) | tee -a {log_file}")
+    os.system(f"echo $(pwd) | tee -a {log_file}")
+    os.system(f"echo 'Version:' $(VERSION) | tee -a {log_file}")
+    os.system(f"echo 'Git diff:'| tee -a {log_file}")
+    os.system(f"git diff | tee -a {log_file}")
+    os.system(f"nvidia-smi| tee -a {log_file}")
+    log_file = f"{log_folder}/{time_str}.log"
+    return log_file
+
 # Set up cfg
 cfg = get_config(args.model_cfg)
 print(f"cfg: {cfg}")
 
 # Setup Tensorboard logger
-logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)
-
+log_folder = os.path.join(args.root_dir, cfg['NAME'])
+logger = TensorBoardLogger(log_folder, name='', version='', default_hp_metric=False)
+os.makedirs(log_folder, exist_ok=True) 
+crete_logging_file(log_folder)
 # Set up model
 # model = FFHFlow(cfg)
 # model = NormflowsFFHFlowPosEncWithTransl(cfg)
@@ -72,7 +92,8 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
                      callbacks=[checkpoint_callback],
-                     resume_from_checkpoint=ckpt_path)
+                     resume_from_checkpoint=ckpt_path,
+                     deterministic=True)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)

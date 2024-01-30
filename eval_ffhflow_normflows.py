@@ -3,6 +3,9 @@ import torch
 import os
 import pickle
 
+import sys
+# clone this repo https://github.com/qianbot/nflows
+sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
 from ffhflow.utils.metrics import maad_for_grasp_distribution
@@ -53,6 +56,7 @@ if Metrics:
     rot_loss_sum = 0
     joint_loss_sum = 0
     print(len(val_loader))
+    num_nan_out = 0
     with torch.no_grad():
         batch = load_batch('eval_batch.pth')
         for idx in range(len(batch['obj_name'])):
@@ -60,7 +64,7 @@ if Metrics:
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
-            out = model.sample(batch, idx, num_samples=200)
+            # out = model.sample(batch, idx, num_samples=200)
 
 
             transl_loss, rot_loss, joint_loss = maad_for_grasp_distribution(out, grasps_gt)
