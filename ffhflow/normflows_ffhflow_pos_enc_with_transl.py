@@ -470,7 +470,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
 
 
-class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
+class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """

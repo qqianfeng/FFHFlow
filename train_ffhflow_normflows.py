@@ -13,7 +13,7 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_Grasp
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
 
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -49,7 +49,7 @@ crete_logging_file(log_folder)
 # Set up model
 # model = FFHFlow(cfg)
 # model = NormflowsFFHFlowPosEncWithTransl(cfg)
-model = NormflowsFFHFlowPosEncWithTransl_Grasp(cfg)
+model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
 
 # Setup checkpoint saving
 save_folder = os.path.join(args.root_dir, cfg['NAME'])

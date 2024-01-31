@@ -11,7 +11,7 @@ from ffhflow.datasets import FFHDataModule
 from ffhflow.utils.metrics import maad_for_grasp_distribution
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_Grasp
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
 
 def save_batch_to_file(batch):
     torch.save(batch, "eval_batch.pth")
@@ -38,7 +38,7 @@ ffh_datamodule = FFHDataModule(cfg)
 ckpt_path = args.ckpt_path
 
 # model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
-model = NormflowsFFHFlowPosEncWithTransl_Grasp.load_from_checkpoint(ckpt_path, cfg=cfg)
+model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 val_loader = ffh_datamodule.val_dataloader()
