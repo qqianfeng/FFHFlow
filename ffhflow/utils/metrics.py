@@ -41,6 +41,7 @@ def euclidean_distance_points_pairwise_np(pt1, pt2):
         dist_mat[idx] = dist_2
     return dist_mat
 
+
 def euclidean_distance_joint_conf_pairwise_np(joint1, joint2):
     dist_mat = np.zeros((joint1.shape[0],joint2.shape[0]))
     for idx in range(joint1.shape[0]):
@@ -49,22 +50,28 @@ def euclidean_distance_joint_conf_pairwise_np(joint1, joint2):
         dist_mat[idx] = dist_2
     return dist_mat
 
+
 def maad_for_grasp_distribution(grasp1, grasp2):
     """_summary_
 
     Args:
-        grasp1 (dict): N
-        grasp2 (dict): M
+        grasp1 (dict): predicted grasp set
+        grasp2 (dict): ground truth grasp set
 
     Returns:
         _type_: _description_
     """
+
+    # Convert tensor to numpy if needed
     if torch.is_tensor(grasp1['rot_matrix']):
         grasp1['rot_matrix'] = grasp1['rot_matrix'].cpu().data.numpy()
         grasp1['transl'] = grasp1['transl'].cpu().data.numpy()
         grasp1['pred_joint_conf'] = grasp1['pred_joint_conf'].cpu().data.numpy()
+
+    # calculate distance matrix
     transl_dist_mat = euclidean_distance_points_pairwise_np(grasp1['transl'], grasp2['transl'])
     rot_dist_mat = geodesic_distance_rotmats_pairwise_np(grasp1['rot_matrix'], grasp2['rot_matrix'])
+
     # Adapt format of joint conf from 15 dim to 20 dim and numpy array
     grasp2_joint_conf = np.zeros((len(grasp2['joint_conf']),20))
     for idx in range(len(grasp2['joint_conf'])):
@@ -72,16 +79,27 @@ def maad_for_grasp_distribution(grasp1, grasp2):
     pred_joint_conf_full = np.zeros((grasp1['pred_joint_conf'].shape[0], 20))
     for idx in range(grasp1['pred_joint_conf'].shape[0]):
         pred_joint_conf_full[idx] = utils.full_joint_conf_from_vae_joint_conf(grasp1['pred_joint_conf'][idx])
-
     grasp1['pred_joint_conf'] = pred_joint_conf_full
+
     joint_dist_mat = euclidean_distance_joint_conf_pairwise_np(grasp1['pred_joint_conf'], grasp2_joint_conf)
+
     transl_loss = np.min(transl_dist_mat, axis=1)  # [N,1]
     rot_loss = np.zeros_like(transl_loss)
     joint_loss = np.zeros_like(transl_loss)
+
+    cor_grasp_idxs = []
+    # find corresponding grasp according to transl dist and add the rot/joint loss
     for idx in range(transl_loss.shape[0]):
-        rot_loss[idx] = rot_dist_mat[idx, np.argmin(transl_dist_mat[idx])]
-        joint_loss[idx] = joint_dist_mat[idx, np.argmin(transl_dist_mat[idx])]
-    return np.sum(transl_loss), np.sum(rot_loss), np.sum(joint_loss)
+        cor_grasp_idx = np.argmin(transl_dist_mat[idx])
+        cor_grasp_idxs.append(cor_grasp_idx)
+        rot_loss[idx] = rot_dist_mat[idx, cor_grasp_idx]
+        joint_loss[idx] = joint_dist_mat[idx, cor_grasp_idx]
+
+    # Calculate coverage. How many grasps are found in grasp2 set.
+    unique_cor_grasp_idxs = sorted(set(cor_grasp_idxs), key=cor_grasp_idxs.index)
+    coverage = len(unique_cor_grasp_idxs) / len(grasp2['transl'])
+
+    return np.sum(transl_loss), np.sum(rot_loss), np.sum(joint_loss), coverage
 
 
 
