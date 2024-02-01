@@ -470,7 +470,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
 
 
-class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
+class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
 
     def __init__(self, cfg: CfgNode):
         """
@@ -562,7 +562,6 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
             optimizer = torch.optim.SGD(params=trainable_params,
                                     lr=self.cfg.TRAIN.LR,
                                     momentum=0.9)
-
         # scheduler = torch.optim.LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs=10, max_epochs=40)
         if self.warmup_steps > 0: 
             scheduler = torch.optim.lr_scheduler.LinearLR(
@@ -575,7 +574,6 @@ class NormflowsFFHFlowPosEncWithTransl_Grasp(Metaclass):
         else:
             opt_dict = {"optimizer": optimizer}
         return opt_dict
-
 
     def initialize(self, batch: Dict, conditioning_feats: torch.Tensor):
         """

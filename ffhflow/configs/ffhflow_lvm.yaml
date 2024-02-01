@@ -1,4 +1,4 @@
-NAME: flow_lvm_lr1e-5_2
+NAME: flow_lvm_lr1e-4_no_pe
 BASE_PACKAGE: normflows # nflows
 
 DATASETS:
@@ -10,7 +10,7 @@ DATASETS:
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 200000 # 300000 #100000 for train with nll and second 100000 for fintune
+  TOTAL_STEPS: 200000 # 200000, 300000 #100000 for train with nll and second 100000 for fintune
   LOG_STEPS: 1000
   VAL_STEPS: 1000
   # CHECKPOINT_STEPS: 100
@@ -69,7 +69,7 @@ MODEL:
     GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
-    DIM: 136 # input dims, also the same dim for base distribution of standard norm
+    DIM: 22 # input dims, 136： positional encoding; 22(3+3+16): no position encoding
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow

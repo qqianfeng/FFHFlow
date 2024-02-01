@@ -13,7 +13,7 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_Grasp
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
 
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -49,7 +49,7 @@ crete_logging_file(log_folder)
 # Set up model
 # model = FFHFlow(cfg)
 # model = NormflowsFFHFlowPosEncWithTransl(cfg)
-model = NormflowsFFHFlowPosEncWithTransl_Grasp(cfg)
+model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
 
 # Setup checkpoint saving
 save_folder = os.path.join(args.root_dir, cfg['NAME'])
@@ -64,12 +64,14 @@ else: # remove tf files only for better monitoring in tensorboard
     files = os.listdir(save_folder)
     for f in files:
         if "events.out.tfevents" in f:
+            print(f"Removing {f}!!!")
             os.remove(os.path.join(save_folder, f))
 
 fname = os.path.join(save_folder, 'hparams.yaml')
-if os.path.isfile(fname):
+if os.path.isfile(fname) and args.resume_ckp is None:
+    print(f"Removing {fname}!!!")
     os.remove(fname)
-shutil.copy(args.model_cfg, fname)
+    shutil.copy(args.model_cfg, fname)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)

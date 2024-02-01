@@ -61,6 +61,7 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
         """
         super().__init__()
         self.cfg = cfg
+        self.positional_encoding = cfg.MODEL.FLOW.DIM > 22
         glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.DIM,
                                 hidden_dim=cfg.MODEL.FLOW.LAYER_HIDDEN_FEATURES,
                                 flow_layers=cfg.MODEL.FLOW.NUM_LAYERS,
@@ -69,7 +70,23 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
                                 base_dist=cfg.MODEL.FLOW.BASE,
                                 cfg=cfg)
         self.flow = glow.model
-        self.pe = PositionalEncoding()
+        print(f"positional_encoding is {self.positional_encoding}")
+        if self.positional_encoding:
+            self.pe = PositionalEncoding()
+        else:
+            self.pe = None
+
+    def angle_trans_no_pe(self, batch: Dict, feats: torch.Tensor):
+        batch_size = feats.shape[0]
+
+        # input of positional encoded angles
+        angles = batch['angle_vector']  # [batch_size,3,3]
+        angles = angles.reshape(batch_size, -1).to(feats.dtype)
+
+        transl = batch['transl']
+        transl = transl.reshape(batch_size, -1).to(feats.dtype)
+
+        return angles, transl
 
     def log_prob(self, batch: Dict, feats: torch.Tensor) -> Tuple:
         """
@@ -84,18 +101,19 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
 
         # feats = feats.float()  # same as to(torch.float32)  [64,1024]
         batch_size = feats.shape[0]
+        if self.positional_encoding:
+            # input of positional encoded angles
+            angles = batch['angle_vector']  # [batch_size,3,3]
+            angles = self.pe.forward_localinn(angles)
+            angles = angles.reshape(batch_size, -1).to(feats.dtype)
 
-        # input of positional encoded angles
-        angles = batch['angle_vector']  # [batch_size,3,3]
-        angles = self.pe.forward_localinn(angles)
-        angles = angles.reshape(batch_size, -1).to(feats.dtype)
-
-        transl = batch['transl']
-        transl = self.pe.forward_transl(transl)
-        transl = transl.reshape(batch_size, -1).to(feats.dtype)
+            transl = batch['transl']
+            transl = self.pe.forward_transl(transl)
+            transl = transl.reshape(batch_size, -1).to(feats.dtype)
+        else:
+            angles, transl = self.angle_trans_no_pe(batch, feats)
 
         joint_conf = batch['joint_conf']
-
         joint_conf = joint_conf.reshape(batch_size, -1).to(feats.dtype)
         samples = torch.cat([angles, transl, joint_conf],dim=1)
 
@@ -128,19 +146,23 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
 
         # we always sample z from prior
         assert z is None
-
         # Generates samples from the distribution together with their log probability.
         samples, log_prob = self.flow.sample(num_samples, context=feats)
         pred_params = samples.reshape(batch_size, num_samples, -1)
+        
+        if self.positional_encoding:
 
-        pred_pose = pred_params[:, :, :60]
-        # decode
-        pred_pose = pred_pose.reshape(batch_size, num_samples, 3, -1)
-        pred_angles = self.pe.backward(pred_pose)
+            pred_pose = pred_params[:, :, :60]
+            # decode
+            pred_pose = pred_pose.reshape(batch_size, num_samples, 3, -1)
+            pred_angles = self.pe.backward(pred_pose)
 
-        pred_pose_transl = pred_params[:, :, 60:120]
-        pred_pose_transl = pred_pose_transl.reshape(batch_size, num_samples, 3, -1)
-        pred_pose_transl = self.pe.backward_transl(pred_pose_transl)
+            pred_pose_transl = pred_params[:, :, 60:120]
+            pred_pose_transl = pred_pose_transl.reshape(batch_size, num_samples, 3, -1)
+            pred_pose_transl = self.pe.backward_transl(pred_pose_transl)
+        else:
+            pred_angles = pred_params[:, :, :3]
+            pred_pose_transl = pred_params[:, :, 3:6]
 
         pred_joint_conf = pred_params[:, :, 120:]
         return log_prob, pred_angles, pred_pose_transl, pred_joint_conf
