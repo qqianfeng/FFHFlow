@@ -68,9 +68,17 @@ else: # remove tf files only for better monitoring in tensorboard
             os.remove(os.path.join(save_folder, f))
 
 fname = os.path.join(save_folder, 'hparams.yaml')
-if os.path.isfile(fname) and args.resume_ckp is None:
-    print(f"Removing {fname}!!!")
-    os.remove(fname)
+if args.resume_ckp is None: # new training folder
+    if os.path.isfile(fname):
+        print(f"Removing {fname}!!!")
+        os.remove(fname)
+    print(f"Copying {args.model_cfg} to {fname}!!!")
+    shutil.copy(args.model_cfg, fname)
+else: # resuming training
+    # print(f"Removing {fname} before copying!!!")
+    # os.remove(fname)
+    fname = fname.replace("hparams", "hparams_new")
+    print(f"Copying {args.model_cfg} to {fname}!!!")
     shutil.copy(args.model_cfg, fname)
 
 # configure dataloader
