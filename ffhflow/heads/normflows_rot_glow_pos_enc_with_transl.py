@@ -160,9 +160,10 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
             pred_pose_transl = pred_params[:, :, 60:120]
             pred_pose_transl = pred_pose_transl.reshape(batch_size, num_samples, 3, -1)
             pred_pose_transl = self.pe.backward_transl(pred_pose_transl)
+            pred_joint_conf = pred_params[:, :, 120:]
         else:
             pred_angles = pred_params[:, :, :3]
             pred_pose_transl = pred_params[:, :, 3:6]
+            pred_joint_conf = pred_params[:, :, 6:]
 
-        pred_joint_conf = pred_params[:, :, 120:]
         return log_prob, pred_angles, pred_pose_transl, pred_joint_conf

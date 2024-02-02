@@ -525,6 +525,8 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # for param in self.prior_flow.parameters():
         #     param.requires_grad = False
 
+        # pe flag
+        self.positional_encoding = cfg.MODEL.FLOW.DIM > 22
         # grasp flow
         self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
         
