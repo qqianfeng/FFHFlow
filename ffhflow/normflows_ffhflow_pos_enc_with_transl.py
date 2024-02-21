@@ -588,12 +588,16 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # Necessary to initialize ActNorm layers.
 
         with torch.no_grad():
-            _, _ = self.flow.log_prob(batch, conditioning_feats)
+            fake_latents = torch.ones([conditioning_feats.shape[0], self.cfg.MODEL.FLOW.CONTEXT_FEATURES]).cuda()
+            # init prior flow
             if self.prior_flow_flag:
                 if self.prior_flow_cond:
-                    _ = self.prior_flow.log_prob(conditioning_feats, conditioning_feats)
+                    _ = self.prior_flow.log_prob(fake_latents, conditioning_feats)
                 else:
-                    _ = self.prior_flow.log_prob(conditioning_feats)
+                    _ = self.prior_flow.log_prob(fake_latents)
+
+            # init grasp flow
+            _, _ = self.flow.log_prob(batch, fake_latents)
 
             self.initialized = True
 
@@ -855,9 +859,9 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
             batch_size = batch['bps_object'].shape[0]
-            pcd_feats_temmp = pcd_feats.repeat(batch_size, 1)
-            self.initialize(batch, pcd_feats_temmp)
-            del pcd_feats_temmp
+            pcd_feats_temp = pcd_feats.repeat(batch_size, 1)
+            self.initialize(batch, pcd_feats_temp)
+            del pcd_feats_temp
 
         # sample from prior flow
         conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
