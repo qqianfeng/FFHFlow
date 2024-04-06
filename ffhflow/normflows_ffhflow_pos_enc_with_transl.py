@@ -6,6 +6,7 @@ import torch
 import transforms3d
 from yacs.config import CfgNode
 import normflows as nf
+from time import time
 
 # from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
@@ -909,14 +910,20 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
 
-        # extractt pcd feats
+        time1 = time()
+        # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
+        time2 = time()
+        print('pcd_enc takes:',time2-time1)
+
         # sample from prior flow
         conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-
+        time3 = time()
+        print('prior_flow takes:',time3-time2)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-
+        print('grasp flow takes:',time()-time3)
+        print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)

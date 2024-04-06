@@ -23,13 +23,13 @@ def load_batch(path):
     return torch.load(path, map_location="cuda:0")
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-4_best/hparams.yaml', help='Path to config file')
 # parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
-Visualization = False
-MAAD = True
+Visualization = True
+MAAD = False
 run_t_sne = False
 load_offline_t_sne = False
 # Set up cfg
@@ -213,6 +213,31 @@ if Visualization:
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
             out = model.sample(batch, idx, num_samples=num_gt_grasps)
             print('visualize',batch['obj_name'][idx] )
+
+            # plot value distribution to show multi-modality
+            if torch.is_tensor(out['rot_matrix']):
+                out_np = {}
+                for key, value in out.items():
+                    out_np[key] = value.cpu().data.numpy()
+            import matplotlib.pyplot as plt
+            X = np.linspace(-5.0, 5.0, out['pred_angles'].shape[0])
+            fig, ax = plt.subplots()
+            ax.set_title("PDF from Template")
+            # ax.hist(data, density=True, bins=100)
+            ax.hist(out_np['pred_pose_transl'][:,0], label='1')
+            ax.hist(out_np['pred_pose_transl'][:,1], label='2')
+            ax.hist(out_np['pred_pose_transl'][:,2], label='3')
+            ax.legend()
+            fig.show()
+
+            # rng = np.random.RandomState(10)  # deterministic random data
+            # a = np.hstack((rng.normal(size=1000),
+            #             rng.normal(loc=5, scale=2, size=1000)))
+            # _ = plt.hist(a, bins='auto')  # arguments are passed to np.histogram
+            # plt.title("Histogram with 'auto' bins")
+            # Text(0.5, 1.0, "Histogram with 'auto' bins")
+            # plt.show()
+
             # If we need to save the results for FFHEvaluator
             # with open('flow_grasps.pkl', 'wb') as fp:
             #     pickle.dump(out, fp, protocol=2)
