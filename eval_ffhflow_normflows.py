@@ -11,7 +11,7 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.utils.metrics import maad_for_grasp_distribution
+from ffhflow.utils.metrics import maad_for_grasp_distribution, maad_for_grasp_distribution_reversed
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
 from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
@@ -28,8 +28,8 @@ parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-
 parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
-Visualization = True
-MAAD = False
+Visualization = False
+MAAD = True
 run_t_sne = False
 load_offline_t_sne = False
 # Set up cfg
@@ -167,7 +167,7 @@ if MAAD:
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
             out = model.sample(batch, idx, num_samples=100)
 
-            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt)
+            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution_reversed(out, grasps_gt)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
                 transl_loss_sum += transl_loss
                 rot_loss_sum += rot_loss
