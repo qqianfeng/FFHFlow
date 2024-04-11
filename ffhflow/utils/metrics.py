@@ -38,7 +38,7 @@ def euclidean_distance_points_pairwise_np(pt1, pt2):
     for idx in range(pt1.shape[0]):
         deltas = pt2 - pt1[idx]
         dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-        dist_mat[idx] = dist_2
+        dist_mat[idx] = np.sqrt(dist_2)
     return dist_mat
 
 
@@ -47,7 +47,7 @@ def euclidean_distance_joint_conf_pairwise_np(joint1, joint2):
     for idx in range(joint1.shape[0]):
         deltas = joint2 - joint1[idx]
         dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-        dist_mat[idx] = dist_2
+        dist_mat[idx] = np.sqrt(dist_2)
     return dist_mat
 
 
