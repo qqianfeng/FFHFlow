@@ -164,29 +164,30 @@ if MAAD:
 
     loss_per_item = {
         'kit_BakingSoda':[0,0,0],
-        'kit_BathDetergent':[0,0,0],
+        # 'kit_BathDetergent':[0,0,0],
         'kit_BroccoliSoup':[0,0,0],
         'kit_CoughDropsLemon':[0,0,0],
         'kit_Curry':[0,0,0],
         'kit_FizzyTabletsCalcium':[0,0,0],
-        'kit_InstantSauce':[0,0,0],
+        # 'kit_InstantSauce':[0,0,0],
         'kit_NutCandy':[0,0,0],
         'kit_PotatoeDumplings':[0,0,0],
-        'kit_Sprayflask':[0,0,0],
+        # 'kit_Sprayflask':[0,0,0],
         'kit_TomatoSoup':[0,0,0],
         'kit_YellowSaltCube2':[0,0,0],
+        'kit_Peanuts':[0,0,0]
     }
 
     with torch.no_grad():
-        # batch = load_batch('eval_batch.pth')
-        batch = load_batch('eval_batch_correct_eval.pth')
+        batch = load_batch('eval_batch.pth')
+        # batch = load_batch('eval_batch_correct_eval.pth')
         print(batch['obj_name'])
         for idx in range(len(batch['obj_name'])):
             palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
-            out = model.sample(batch, idx, num_samples=20)
+            out = model.sample(batch, idx, num_samples=100)
 
             transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
@@ -211,8 +212,20 @@ if MAAD:
         print('rot_loss_sum:', rot_loss_sum)
         print('joint_loss_sum:', joint_loss_sum)
         print('coverage', coverage_mean)
+        transl_list = []
+        rot_list = []
+        joint_list = []
         for k, v in loss_per_item.items():
             print(k,v)
+            transl_list.append(v[0])
+            rot_list.append(v[1])
+            joint_list.append(v[2])
+        transl_list_np = np.std(transl_list)
+        rot_list_np = np.std(rot_list)
+        joint_list_np = np.std(joint_list)
+        print(transl_list_np)
+        print(rot_list_np)
+        print(joint_list_np)
         print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
         print(f'invalid transl output is: {num_nan_transl}/{len(batch["obj_name"])}')
         print(f'invalid rot output is: {num_nan_rot}/{len(batch["obj_name"])}')
