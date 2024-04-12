@@ -7,6 +7,7 @@ import transforms3d
 from yacs.config import CfgNode
 import normflows as nf
 
+
 # from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
 
@@ -14,7 +15,45 @@ from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
 from .heads import NormflowsGraspFlowPosEncWithTransl, PriorFlow
 from .utils.losses import gaussian_nll, gaussian_ent
+from .utils import utils
 
+def kl_divergence(mu, logvar, device="cpu"):
+    """
+      Computes the kl divergence for batch of mu and logvar.
+    """
+    return torch.mean(-.5 * torch.sum(1. + logvar - mu**2 - torch.exp(logvar), dim=-1))
+
+
+def transl_l2_loss(pred_transl,
+                   gt_transl,
+                   torch_l2_loss_fn,
+                   device='cpu'):
+    return torch_l2_loss_fn(pred_transl, gt_transl)
+
+
+def rot_6D_l2_loss(pred_rot_6D,
+                    gt_rot_matrix,
+                    torch_l2_loss_fn,
+                    device='cpu'):
+    """Takes in the 3D translation and 6D rotation prediction and computes l2 loss to ground truth 3D translation
+    and 3x3 rotation matrix by translforming the 6D rotation to 3x3 rotation matrix.
+
+    Args:
+        pred_transl_rot_6D (_type_): rotation representation of 6 D
+        gt_transl_rot_matrix (_type_): roration matrix [3,3] + translation
+        torch_l2_loss_fn (_type_): _description_
+        device (str, optional): _description_. Defaults to 'cpu'.
+
+    Returns:
+        _type_: _description_
+    """
+    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_rot_6D, device=device)  # batch_size*3*3
+    pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
+    gt_rot_matrix = gt_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
+    # l2 loss on rotation matrix
+    l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
+
+    return l2_loss_rot
 
 class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
@@ -27,9 +66,6 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         super().__init__()
 
         self.cfg = cfg
-        self.prob_backbone = cfg.MODEL.BACKBONE.PROBABILISTIC
-        self.prior_flow_flag = cfg.MODEL.BACKBONE.PRIOR_FLOW
-        self.prior_flow_grasp_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_GRASP_COND 
 
         # Create backbone feature extractor
         # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
@@ -40,15 +76,12 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         #     param.requires_grad = False
 
         self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
-        if self.prior_flow_flag:
-            self.prior_flow = PriorFlow(cfg)
-        else:
-            self.prior_flow = None
 
-        # self.kl_loss = kl_divergence
-        # self.rot_6D_l2_loss = rot_6D_l2_loss
-        # self.transl_l2_loss = transl_l2_loss
-        # self.L2_loss = torch.nn.MSELoss(reduction='mean')
+        self.kl_loss = kl_divergence
+        self.rot_6D_l2_loss = rot_6D_l2_loss
+        self.transl_l2_loss = transl_l2_loss
+
+        self.L2_loss = torch.nn.MSELoss(reduction='mean')
 
         self.initialized = False
         self.automatic_optimization = False
@@ -61,9 +94,6 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
         trainable_params = list(self.backbone.parameters()) + \
                            list(self.flow.parameters())
-                           
-        if self.prior_flow_flag: 
-            trainable_params += list(self.prior_flow.parameters())
         
         if self.cfg.TRAIN.OPT == "AdamW":
             optimizer = torch.optim.AdamW(params=trainable_params,
@@ -89,11 +119,6 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         with torch.no_grad():
             _, _ = self.flow.log_prob(batch, conditioning_feats)
-            if self.prior_flow_flag:
-                if self.prior_flow_grasp_cond:
-                    _ = self.prior_flow.log_prob(conditioning_feats, batch)
-                else:
-                    _ = self.prior_flow.log_prob(conditioning_feats)
 
             self.initialized = True
 
@@ -147,31 +172,28 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
 
         # 1. Reconstruction loss
-        # pred_angles = output['pred_angles'].view(-1,3)
-        # pred_pose_transl = output['pred_pose_transl'].view(-1,3)
-        # pred_joint_conf = output['pred_joint_conf'].view(-1,16)
-        # pred_joint_conf = pred_joint_conf[:,:15]
-        # gt_angles = batch['angle_vector']  # [batch_size, 3,3]
-        # gt_transl = batch['transl']
-        # gt_joint_conf = batch['joint_conf'][:,:15]
-        # rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
-        # transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
-        # joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
+        pred_angles = output['pred_angles'].view(-1,3)
+        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
+        pred_joint_conf = pred_joint_conf[:,:15]
+        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
+        gt_transl = batch['transl']
+        gt_joint_conf = batch['joint_conf'][:,:15]
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
 
         # TODO: add joint as loss
 
         # 2. Compute NLL loss
-        if self.prob_backbone:
-            cond_mean, cond_logvar, conditioning_feats = self.backbone(batch, return_mean_var=True)
-        else:
-            conditioning_feats = self.backbone(batch)
+        conditioning_feats = self.backbone(batch)
 
         # grasp -> z
         if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
             padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
             batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
-        grasp_nll = -log_prob.mean()
+        loss_nll = -log_prob.mean()
 
         # 3: Compute orthonormal loss on 6D representations
         # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
@@ -183,37 +205,19 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
         #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
         #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+        #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
-        def update_kl_cof(interval=5000):
-            kl_cof = 0.01 * (self.global_step // interval) 
-            if kl_cof > 1.:
-                kl_cof = 1.0                
-            return kl_cof
+        losses = dict(loss=loss.detach(),
+                    loss_nll=loss_nll.detach(),
+                    rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
+                    transl_loss=transl_loss.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
 
-        # Compute KL divergence between shape posterior and prior
-        if self.prob_backbone:
-            # add prior flow nll into kl_nll
-            if self.prior_flow_flag: 
-                if self.prior_flow_grasp_cond: 
-                    kl_ll, z = self.prior_flow.log_prob(conditioning_feats, batch)
-                    kl_nll = -kl_ll
-                else:
-                    kl_ll = self.prior_flow.log_prob(conditioning_feats)
-                    kl_nll = -kl_ll.mean()
-            else:
-                kl_nll = gaussian_nll(conditioning_feats, cond_mean, cond_logvar) 
-
-            kl_ent = gaussian_ent(cond_logvar)
-            kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * kl_nll - self.cfg.LOSS_WEIGHTS['KL_ENT'] * kl_ent
-            kl_cof = update_kl_cof(interval=1e4)
-            loss = kl_cof * kl_loss + self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll 
-
-        output['losses'] = dict(loss=loss.detach(),
-                                grasp_nll=grasp_nll.detach(),
-                                kl_nll=kl_nll.detach(),
-                                kl_ent=kl_ent.detach(),
-                                kl_loss=kl_loss.detach())
-                                # loss_pose_6d=loss_pose_6d.detach(),
+        output['losses'] = losses
 
         return loss
 
@@ -240,7 +244,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
         batch = joint_batch
         optimizer = self.optimizers(use_pl_optimizer=True)
-        output = {} # self.forward_step(batch, train=True)
+        output = self.forward_step(batch, train=True)
         loss = self.compute_loss(batch, output, train=True)
 
         optimizer.zero_grad()
@@ -262,9 +266,9 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         Returns:
             Dict: Dictionary containing regression output.
         """
-        output = {} # self.forward_step(batch, train=False)
+        output = self.forward_step(batch, train=False)
         loss = self.compute_loss(batch, output, train=False)
-        # output['loss'] = loss
+        output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
         return output
@@ -525,8 +529,6 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # for param in self.prior_flow.parameters():
         #     param.requires_grad = False
 
-        # pe flag
-        self.positional_encoding = cfg.MODEL.FLOW.DIM > 22
         # grasp flow
         self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
         
