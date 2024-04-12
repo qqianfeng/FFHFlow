@@ -11,7 +11,7 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.utils.metrics import maad_for_grasp_distribution
+from ffhflow.utils.metrics import maad_for_grasp_distribution, maad_for_grasp_distribution_reversed
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
 from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
@@ -23,9 +23,9 @@ def load_batch(path):
     return torch.load(path, map_location="cuda:0")
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-4_best/hparams.yaml', help='Path to config file')
 # parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
 
 args = parser.parse_args()
 Visualization = False
@@ -158,8 +158,29 @@ if MAAD:
     num_nan_transl = 0
     num_nan_rot = 0
     num_nan_joint = 0
+    tmp_transl_sum = 2.717126583509403
+    tmp_rot_sum = 6101.889077039017
+    tmp_joint_sum = 5175.546305659608
+
+    # loss_per_item = {
+    #     'kit_BakingSoda':[0,0,0],
+    #     'kit_BathDetergent':[0,0,0],
+    #     'kit_BroccoliSoup':[0,0,0],
+    #     'kit_CoughDropsLemon':[0,0,0],
+    #     'kit_Curry':[0,0,0],
+    #     'kit_FizzyTabletsCalcium':[0,0,0],
+    #     'kit_InstantSauce':[0,0,0],
+    #     'kit_NutCandy':[0,0,0],
+    #     'kit_PotatoeDumplings':[0,0,0],
+    #     'kit_Sprayflask':[0,0,0],
+    #     'kit_TomatoSoup':[0,0,0],
+    #     'kit_YellowSaltCube2':[0,0,0],
+    # }
+
     with torch.no_grad():
         batch = load_batch('eval_batch.pth')
+        # batch = load_batch('eval_batch_correct_eval.pth')
+        print(batch['obj_name'])
         for idx in range(len(batch['obj_name'])):
             palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
@@ -181,12 +202,17 @@ if MAAD:
                     num_nan_joint += 1
                 num_nan_out += 1
             coverage_sum += coverage
+            # loss_per_item[batch['obj_name'][idx]][0] += transl_loss/tmp_transl_sum
+            # loss_per_item[batch['obj_name'][idx]][1] += rot_loss/tmp_rot_sum
+            # loss_per_item[batch['obj_name'][idx]][2] += joint_loss/tmp_joint_sum
 
         coverage_mean = coverage_sum / len(batch['obj_name'])
         print('transl_loss_sum:', transl_loss_sum)
         print('rot_loss_sum:', rot_loss_sum)
         print('joint_loss_sum:', joint_loss_sum)
         print('coverage', coverage_mean)
+        # for k, v in loss_per_item.items():
+        #     print(k,v)
         print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
         print(f'invalid transl output is: {num_nan_transl}/{len(batch["obj_name"])}')
         print(f'invalid rot output is: {num_nan_rot}/{len(batch["obj_name"])}')
@@ -213,6 +239,31 @@ if Visualization:
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
             out = model.sample(batch, idx, num_samples=num_gt_grasps)
             print('visualize',batch['obj_name'][idx] )
+
+            # plot value distribution to show multi-modality
+            if torch.is_tensor(out['rot_matrix']):
+                out_np = {}
+                for key, value in out.items():
+                    out_np[key] = value.cpu().data.numpy()
+            import matplotlib.pyplot as plt
+            X = np.linspace(-5.0, 5.0, out['pred_angles'].shape[0])
+            fig, ax = plt.subplots()
+            ax.set_title("PDF from Template")
+            # ax.hist(data, density=True, bins=100)
+            ax.hist(out_np['pred_pose_transl'][:,0], label='1')
+            ax.hist(out_np['pred_pose_transl'][:,1], label='2')
+            ax.hist(out_np['pred_pose_transl'][:,2], label='3')
+            ax.legend()
+            fig.show()
+
+            # rng = np.random.RandomState(10)  # deterministic random data
+            # a = np.hstack((rng.normal(size=1000),
+            #             rng.normal(loc=5, scale=2, size=1000)))
+            # _ = plt.hist(a, bins='auto')  # arguments are passed to np.histogram
+            # plt.title("Histogram with 'auto' bins")
+            # Text(0.5, 1.0, "Histogram with 'auto' bins")
+            # plt.show()
+
             # If we need to save the results for FFHEvaluator
             # with open('flow_grasps.pkl', 'wb') as fp:
             #     pickle.dump(out, fp, protocol=2)
