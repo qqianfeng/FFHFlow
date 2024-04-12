@@ -41,8 +41,11 @@ ffh_datamodule = FFHDataModule(cfg)
 # Setup PyTorch Lightning Trainer
 ckpt_path = args.ckpt_path
 
-# model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
-model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+if "cnf" in args.model_cfg:
+    model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
+else:
+    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+
 model.eval()
 
 # val_loader = ffh_datamodule.val_dataloader(shuffle=True)
@@ -153,7 +156,7 @@ if MAAD:
     rot_loss_sum = 0
     joint_loss_sum = 0
     coverage_sum = 0
-    print(len(val_loader))
+    print(f"len(val_loader): {len(val_loader)}")
     num_nan_out = 0
     num_nan_transl = 0
     num_nan_rot = 0
