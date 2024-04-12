@@ -4,10 +4,13 @@ import os
 from sklearn.manifold import TSNE
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 
+import open3d as o3d
 import sys
 # clone this repo https://github.com/qianbot/nflows
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
+import subprocess
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
@@ -50,6 +53,12 @@ val_dataset = ffh_datamodule.val_dataset()
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
+path2dict = '/data/net/userstore/qf/ffhflow_real_world_exp/real_world_data_dict.pkl'
+with open(path2dict, 'rb') as f:
+    real_world_data_dict = pickle.load(f)
+
+def load_obj():
+    pass
 
 if not load_offline_t_sne:
     ##### Run evaluation to get t-SNE features
@@ -58,19 +67,26 @@ if not load_offline_t_sne:
     print(len(val_loader))
 
     with torch.no_grad():
-        for i, batch in enumerate(val_loader):
-            # start = time()
-            for idx in range(len(batch['obj_name'])):
-                # palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
-                # grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
+        for name, paths in real_world_data_dict.items():
+            print('process ', name)
+            for path in paths:
+                obj_pcd = o3d.io.read_point_cloud(path)
+                pc_tensor = torch.from_numpy(np.asarray(obj_pcd.points))
+                pc_center = obj_pcd.get_center()
+                obj_pcd.translate(-pc_center)
+                pc_tensor.to('cuda')
 
-                out, cond_feat = model.sample_in_experiment(bps, idx, num_samples=100,return_cond_feat=True)
+                torch.save(pc_tensor, '/home/qf/pc_tensor.pt')
+                subprocess.run(['/home/qf/workspace/ffhflow/scripts/bps_encode.sh',], shell=True)
+                enc_dict = torch.load('/home/qf/enc_dict.pt')
+                bps = enc_dict['dists'] # bps as tensor
+
+                out, cond_feat = model.sample_in_experiment(bps, num_samples=100,return_cond_feat=True)
                 cond_feat = cond_feat.cpu().numpy()
-                obj_name_list.append(np.asarray([batch['obj_name'][idx]])[:, np.newaxis])
+                obj_name_list.append(np.asarray([name])[:, np.newaxis])
                 cond_feat_list.append(cond_feat)
             # print('take time one batch', time()-start)
-            if i > 100: #100
-                break
+
 
     obj_names = np.concatenate(obj_name_list, axis=0)
     cond_feats = np.concatenate(cond_feat_list, axis=0).astype(np.float64)
@@ -107,19 +123,16 @@ ty = scale_to_01_range(ty)
 fig = plt.figure()
 ax = fig.add_subplot(111)
 colors_per_name = {
-    'kit_BakingSoda':[150,30,230],
-    'kit_BathDetergent':[155,155,155],
-    'kit_BroccoliSoup':[255,0,0],
-    'kit_CoughDropsLemon':[0,255,0],
-    'kit_Curry':[0,0,255],
-    'kit_FizzyTabletsCalcium':[0,255,255],
-    'kit_InstantSauce':[255,0,255],
-    'kit_NutCandy':[255,255,0],
-    'kit_PotatoeDumplings':[0,100,100],
-    'kit_Sprayflask':[100,0,100],
-    'kit_TomatoSoup':[0,100,200],
-    'kit_YellowSaltCube2':[200,200,100],
+    'sugar_box':[255,0,0],
+    'apple':[0,255,0],
+    'tomato_soup_can':[0,0,255],
+    'pudding_box':[0,255,255],
+    'metal_mug':[255,0,255],
+    'mustard_container':[255,255,0],
+    'baseball':[155,155,155],
+    'foam_brick':[200,200,200]
 }
+
 # for every class, we'll add a scatter plot separately
 for obj_name, color in colors_per_name.items():
     # find the samples of the current class in the data
