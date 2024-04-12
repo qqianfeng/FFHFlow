@@ -1,11 +1,9 @@
 import os, time
 import argparse
 import shutil
-
+import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
-
-pl.seed_everything(42, workers=True)
 
 # sets seeds for numpy, torch and python.random.
 import sys
@@ -41,6 +39,13 @@ def crete_logging_file(log_folder):
 cfg = get_config(args.model_cfg)
 print(f"cfg: {cfg}")
 
+pl_train_deterministic = False
+random_seed = cfg.get("RND_SEED", -1)
+if random_seed > -1: 
+    pl.seed_everything(random_seed, workers=True)
+    np.random.seed(random_seed)
+    pl_train_deterministic = True
+
 # Setup Tensorboard logger
 log_folder = os.path.join(args.root_dir, cfg['NAME'])
 logger = TensorBoardLogger(log_folder, name='', version='', default_hp_metric=False)
@@ -49,7 +54,10 @@ crete_logging_file(log_folder)
 # Set up model
 # model = FFHFlow(cfg)
 # model = NormflowsFFHFlowPosEncWithTransl(cfg)
-model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
+if "cnf" in args.model_cfg:
+    model = NormflowsFFHFlowPosEncWithTransl(cfg)
+else:
+    model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
 
 # Setup checkpoint saving
 save_folder = os.path.join(args.root_dir, cfg['NAME'])
@@ -101,7 +109,7 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      move_metrics_to_cpu=True,
                      callbacks=[checkpoint_callback],
                      resume_from_checkpoint=ckpt_path,
-                     deterministic=True)
+                     deterministic=pl_train_deterministic)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)

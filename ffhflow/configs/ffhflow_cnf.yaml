@@ -1,6 +1,6 @@
-NAME: flow_lvm_lr1e-4_RND-1_lx0260
+NAME: flow_cnf_lr1e-4_RND2
 BASE_PACKAGE: normflows # nflows
-RND_SEED: -1 # stochastic when set to -1 
+RND_SEED: 1234 # stochastic when set to -1 
 
 DATASETS:
   PATH: /data/net/userstore/qf/hithand_data/data/ffhnet-data # /data/hdd1/qf/hithand_data/ffhnet-data
@@ -44,7 +44,7 @@ LOSS_WEIGHTS:
 MODEL:
   BACKBONE:
     # posterior distribution: True -> Gaussian; False -> delta;
-    PROBABILISTIC: True
+    PROBABILISTIC: False
     # PCD encoder
     PCD_ENC_HIDDEN_DIM: 128
     # Grasp encoder
@@ -52,7 +52,7 @@ MODEL:
     GRASP_ENC_PE: False
     GRASP_ENC_HIDDEN_DIM: 64
     # PRIOR FLOW related
-    PRIOR_FLOW: True
+    PRIOR_FLOW: False
     PRIOR_FLOW_COND: True # input-conditioned
     PRIOR_FLOW_BASE: "gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     PRIOR_FLOW_NUM_LAYERS: 8 # numbers of flow layers about [Actnorm, LULinear, Coupling]
@@ -70,7 +70,7 @@ MODEL:
     GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
-    DIM: 136 # input dims, 136： positional encoding; 22(3+3+16): no position encoding
+    DIM: 22 # input dims, positional encoding: 136; no position encoding: 22(3+3+16) 
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow
