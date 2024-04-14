@@ -166,20 +166,21 @@ if MAAD:
     tmp_rot_sum = 6101.889077039017
     tmp_joint_sum = 5175.546305659608
 
-    # loss_per_item = {
-    #     'kit_BakingSoda':[0,0,0],
-    #     'kit_BathDetergent':[0,0,0],
-    #     'kit_BroccoliSoup':[0,0,0],
-    #     'kit_CoughDropsLemon':[0,0,0],
-    #     'kit_Curry':[0,0,0],
-    #     'kit_FizzyTabletsCalcium':[0,0,0],
-    #     'kit_InstantSauce':[0,0,0],
-    #     'kit_NutCandy':[0,0,0],
-    #     'kit_PotatoeDumplings':[0,0,0],
-    #     'kit_Sprayflask':[0,0,0],
-    #     'kit_TomatoSoup':[0,0,0],
-    #     'kit_YellowSaltCube2':[0,0,0],
-    # }
+    loss_per_item = {
+        'kit_BakingSoda':[0,0,0],
+        # 'kit_BathDetergent':[0,0,0],
+        'kit_BroccoliSoup':[0,0,0],
+        'kit_CoughDropsLemon':[0,0,0],
+        'kit_Curry':[0,0,0],
+        'kit_FizzyTabletsCalcium':[0,0,0],
+        # 'kit_InstantSauce':[0,0,0],
+        'kit_NutCandy':[0,0,0],
+        'kit_PotatoeDumplings':[0,0,0],
+        # 'kit_Sprayflask':[0,0,0],
+        'kit_TomatoSoup':[0,0,0],
+        'kit_YellowSaltCube2':[0,0,0],
+        'kit_Peanuts':[0,0,0]
+    }
 
     with torch.no_grad():
         batch = load_batch('eval_batch.pth')
@@ -206,9 +207,9 @@ if MAAD:
                     num_nan_joint += 1
                 num_nan_out += 1
             coverage_sum += coverage
-            # loss_per_item[batch['obj_name'][idx]][0] += transl_loss/tmp_transl_sum
-            # loss_per_item[batch['obj_name'][idx]][1] += rot_loss/tmp_rot_sum
-            # loss_per_item[batch['obj_name'][idx]][2] += joint_loss/tmp_joint_sum
+            loss_per_item[batch['obj_name'][idx]][0] += transl_loss #/tmp_transl_sum
+            loss_per_item[batch['obj_name'][idx]][1] += rot_loss  #/tmp_rot_sum
+            loss_per_item[batch['obj_name'][idx]][2] += joint_loss  #/tmp_joint_sum
 
         coverage_mean = coverage_sum / len(batch['obj_name'])
         num_grasp = args.num_samples * len(batch['obj_name'])
@@ -221,6 +222,20 @@ if MAAD:
         print(f'coverage: {coverage_mean:.3f}')
         # for k, v in loss_per_item.items():
         #     print(k,v)
+        transl_list = []
+        rot_list = []
+        joint_list = []
+        for k, v in loss_per_item.items():
+            print(k,v)
+            transl_list.append(v[0])
+            rot_list.append(v[1])
+            joint_list.append(v[2])
+        transl_list_np = np.std(transl_list)
+        rot_list_np = np.std(rot_list)
+        joint_list_np = np.std(joint_list)
+        print(transl_list_np)
+        print(rot_list_np)
+        print(joint_list_np)
         print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
         print(f'invalid transl output is: {num_nan_transl}/{len(batch["obj_name"])}')
         print(f'invalid rot output is: {num_nan_rot}/{len(batch["obj_name"])}')

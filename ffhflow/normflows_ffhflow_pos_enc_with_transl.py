@@ -885,11 +885,11 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+        output = self.convert_output_to_grasp_mat(output)
 
         return output
 
-    def sample_in_experiment(self, bps, num_samples):
+    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False):
         """ generate number of grasp samples for experiment, where each inference takes only one bps
 
         Args:
@@ -941,7 +941,11 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # convert position encoding to original format of matrix or vector
         output = self.convert_output_to_grasp_mat(output, return_arr=False)
 
-        return output
+        if return_cond_feat:
+            return output, pcd_feats
+        else:
+            return output
+
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
 
