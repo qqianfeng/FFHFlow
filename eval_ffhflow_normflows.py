@@ -26,6 +26,7 @@ parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting tra
 parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-4_best/hparams.yaml', help='Path to config file')
 # parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
 args = parser.parse_args()
 Visualization = False
@@ -189,7 +190,7 @@ if MAAD:
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
-            out = model.sample(batch, idx, num_samples=100)
+            out = model.sample(batch, idx, num_samples=args.num_samples)
 
             transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
@@ -210,10 +211,14 @@ if MAAD:
             # loss_per_item[batch['obj_name'][idx]][2] += joint_loss/tmp_joint_sum
 
         coverage_mean = coverage_sum / len(batch['obj_name'])
-        print('transl_loss_sum:', transl_loss_sum)
-        print('rot_loss_sum:', rot_loss_sum)
-        print('joint_loss_sum:', joint_loss_sum)
-        print('coverage', coverage_mean)
+        num_grasp = args.num_samples * len(batch['obj_name'])
+        print(f'transl_loss_sum: {transl_loss_sum:.3f}')
+        print(f'transl_loss_mean per grasp (m): {transl_loss_sum/num_grasp:.6f}')
+        print(f'rot_loss_sum: {rot_loss_sum:.3f}')
+        print(f'rot_loss_mean per grasp (rad): {rot_loss_sum/num_grasp:.3f}')
+        print(f'joint_loss_sum: {joint_loss_sum:.3f}')
+        print(f'joint_loss_mean per grasp (rad^2): {joint_loss_sum/num_grasp:.3f}')
+        print(f'coverage: {coverage_mean:.3f}')
         # for k, v in loss_per_item.items():
         #     print(k,v)
         print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
