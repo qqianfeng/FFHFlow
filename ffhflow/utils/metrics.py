@@ -24,7 +24,7 @@ def geodesic_distance_rotmats_pairwise_np(r1s, r2s):
     return np.arccos(np.clip((tr - 1.0) / 2.0, -1.0, 1.0))
 
 
-def euclidean_distance_points_pairwise_np(pt1, pt2):
+def euclidean_distance_points_pairwise_np(pt1, pt2,L1=False):
     """_summary_
 
     Args:
@@ -38,20 +38,26 @@ def euclidean_distance_points_pairwise_np(pt1, pt2):
     for idx in range(pt1.shape[0]):
         deltas = pt2 - pt1[idx]
         dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-        dist_mat[idx] = dist_2 # np.sqrt(dist_2)
+        if not L1:
+            dist_mat[idx] = dist_2
+        else:
+            dist_mat[idx] = np.sqrt(dist_2)
     return dist_mat
 
 
-def euclidean_distance_joint_conf_pairwise_np(joint1, joint2):
+def euclidean_distance_joint_conf_pairwise_np(joint1, joint2,L1=False):
     dist_mat = np.zeros((joint1.shape[0],joint2.shape[0]))
     for idx in range(joint1.shape[0]):
         deltas = joint2 - joint1[idx]
         dist_2 = np.einsum('ij,ij->i', deltas, deltas)
-        dist_mat[idx] = dist_2 # np.sqrt(dist_2)
+        if not L1:
+            dist_mat[idx] = dist_2
+        else:
+            dist_mat[idx] = np.sqrt(dist_2)
     return dist_mat
 
 
-def maad_for_grasp_distribution(grasp1, grasp2):
+def maad_for_grasp_distribution(grasp1, grasp2,L1=False):
     """_summary_
 
     Args:
@@ -69,7 +75,7 @@ def maad_for_grasp_distribution(grasp1, grasp2):
         grasp1['pred_joint_conf'] = grasp1['pred_joint_conf'].cpu().data.numpy()
 
     # calculate distance matrix
-    transl_dist_mat = euclidean_distance_points_pairwise_np(grasp1['transl'], grasp2['transl'])
+    transl_dist_mat = euclidean_distance_points_pairwise_np(grasp1['transl'], grasp2['transl'],L1)
     rot_dist_mat = geodesic_distance_rotmats_pairwise_np(grasp1['rot_matrix'], grasp2['rot_matrix'])
 
     # Adapt format of joint conf from 15 dim to 20 dim and numpy array
@@ -81,7 +87,7 @@ def maad_for_grasp_distribution(grasp1, grasp2):
         pred_joint_conf_full[idx] = utils.full_joint_conf_from_vae_joint_conf(grasp1['pred_joint_conf'][idx])
     grasp1['pred_joint_conf'] = pred_joint_conf_full
 
-    joint_dist_mat = euclidean_distance_joint_conf_pairwise_np(grasp1['pred_joint_conf'], grasp2_joint_conf)
+    joint_dist_mat = euclidean_distance_joint_conf_pairwise_np(grasp1['pred_joint_conf'], grasp2_joint_conf,L1)
 
     transl_loss = np.min(transl_dist_mat, axis=1)  # [N,1]
     rot_loss = np.zeros_like(transl_loss)

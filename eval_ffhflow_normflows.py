@@ -193,7 +193,7 @@ if MAAD:
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
             out = model.sample(batch, idx, num_samples=args.num_samples)
 
-            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt)
+            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt,L1=True)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
                 transl_loss_sum += transl_loss
                 rot_loss_sum += rot_loss
