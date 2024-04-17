@@ -53,7 +53,6 @@ model.eval()
 val_loader = ffh_datamodule.val_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
-save_path = '/home/yb/Documents/ffhflow_grasp'
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -179,6 +178,7 @@ if MAAD:
     #     # 'kit_Peanuts':[0,0,0]
     # }
     ## initialize ffhevaluator
+    # git clone FFHNet and switch to ffhnet-origin-sim-exp branch
     ffhnet_path = '/home/yb/Projects/hithand_ws/src/FFHNet-dev'
     sys.path.insert(0,ffhnet_path)
 
