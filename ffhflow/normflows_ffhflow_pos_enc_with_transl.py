@@ -95,7 +95,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         """
         trainable_params = list(self.backbone.parameters()) + \
                            list(self.flow.parameters())
-        
+
         if self.cfg.TRAIN.OPT == "AdamW":
             optimizer = torch.optim.AdamW(params=trainable_params,
                                             lr=self.cfg.TRAIN.LR,
@@ -477,7 +477,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
 class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
 
-    def __init__(self, cfg: CfgNode):
+    def __init__(self, cfg: CfgNode, skip_initialization=False):
         """
         Implementing the FFHFlow based on a latent variable model, in order to maximize log_P(G|X) = log_[Integral_z{P(G|z,X)P(z|X)}],
         where G is the grasp configuration, X is the point clouds, z is the shape latents. With Jensen inequality, the ELBO can be derived:
@@ -538,8 +538,10 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
             self.prior_flow = PriorFlow(cfg)
         else:
             self.prior_flow = None
-
-        self.initialized = False
+        if skip_initialization:
+            self.initialized = True
+        else:
+            self.initialized = False
         self.automatic_optimization = False
 
     def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
