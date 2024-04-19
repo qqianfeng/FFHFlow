@@ -70,8 +70,7 @@ if run_t_sne:
                 for idx in range(len(batch['obj_name'])):
                     # palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
                     # grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
-
-                    out, cond_feat = model.sample(batch, idx, num_samples=100, return_arr=True, return_cond_feat=True)
+                    out, cond_feat = model.sample_in_experiment(batch['bps_object'][idx], num_samples=100, return_cond_feat=True)
                     cond_feat = cond_feat.cpu().numpy()
                     obj_name_list.append(np.asarray([batch['obj_name'][idx]])[:, np.newaxis])
                     cond_feat_list.append(cond_feat)
