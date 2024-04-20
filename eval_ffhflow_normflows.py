@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import sys
+# TODO fix this hardcoded path
 # clone this repo https://github.com/qianbot/nflows
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
