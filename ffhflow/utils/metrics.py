@@ -58,7 +58,7 @@ def euclidean_distance_joint_conf_pairwise_np(joint1, joint2,L1=False):
 
 
 def maad_for_grasp_distribution(grasp1, grasp2,L1=False):
-    """_summary_
+    """For each grasp in pt1 set, we find the closest L2 distance to any grasp in pt2 set.
 
     Args:
         grasp1 (dict): predicted grasp set
