@@ -14,7 +14,7 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
-from .heads import NormflowsGraspFlowPosEncWithTransl, PriorFlow
+from .heads import GraspFlowGenerator, LatentFlowPrior
 from .utils.losses import gaussian_nll, gaussian_ent
 from .utils import utils
 
@@ -76,7 +76,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
         # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
+        self.flow = GraspFlowGenerator(cfg)
 
         self.kl_loss = kl_divergence
         self.rot_6D_l2_loss = rot_6D_l2_loss
@@ -531,11 +531,11 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         #     param.requires_grad = False
 
         # grasp flow
-        self.flow = NormflowsGraspFlowPosEncWithTransl(cfg)
+        self.flow = GraspFlowGenerator(cfg)
 
         # prior flow conditioning on pcd feats
         if self.prior_flow_flag:
-            self.prior_flow = PriorFlow(cfg)
+            self.prior_flow = LatentFlowPrior(cfg)
         else:
             self.prior_flow = None
         if skip_initialization:

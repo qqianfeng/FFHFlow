@@ -12,10 +12,10 @@ sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-fl
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.utils.metrics import maad_for_grasp_distribution, maad_for_grasp_distribution_reversed
+from ffhflow.utils.metrics import maad_for_grasp_distribution
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
+from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
 
 def save_batch_to_file(batch):
     torch.save(batch, "eval_batch.pth")
