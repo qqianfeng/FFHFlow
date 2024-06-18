@@ -323,7 +323,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         return log_prob
 
-    def sample(self, batch, idx, num_samples):
+    def sample(self, batch, num_samples):
         """ generate number of grasp samples
 
         Args:
@@ -334,7 +334,7 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
             tensor: _description_
         """
         # move data to cuda
-        bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda') # old: bps.to('cuda')
+        bps_tensor = batch['bps_object'].to(dtype=torch.float64).to('cuda') # old: bps.to('cuda')
         bps_tensor = bps_tensor.view(1,-1)
 
         batch = {'bps_object': bps_tensor}
