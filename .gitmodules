@@ -1,0 +1,6 @@
+[submodule "dependencies/nflows"]
+	path = dependencies/nflows
+	url = https://github.com/qianbot/nflows
+[submodule "dependencies/normflows"]
+	path = dependencies/normflows
+	url = https://github.com/qianbot/normalizing-flows

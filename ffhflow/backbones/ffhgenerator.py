@@ -128,6 +128,68 @@ class FFHGenerator(nn.Module):
         feat = self.fc_flow_feat(feat)
         return feat
 
+class ResNet_3layer(nn.Module):
+    def __init__(self,
+                 in_dim=4096,
+                 hid_dim=512,
+                 out_dim=128,
+                 prob_flag=False,
+                 dtype=torch.float64,
+                 **kwargs):
+        super().__init__()
+
+        self.prob_flag = prob_flag
+        self.bn1 = nn.BatchNorm1d(in_dim)
+        self.rb1 = ResBlock(in_dim, hid_dim)
+        self.rb2 = ResBlock(in_dim + hid_dim, hid_dim)
+        self.rb3 = ResBlock(in_dim + hid_dim, out_dim)
+        if self.prob_flag: 
+            self.enc_mu = nn.Linear(out_dim, out_dim)
+            self.enc_logvar = nn.Linear(out_dim, out_dim)
+        
+        self.dout = nn.Dropout(0.3)
+        # self.sigmoid = nn.Sigmoid()
+
+        self.dtype = dtype
+
+    def forward(self, data, return_mean_var=False):
+        """Run one forward iteration to evaluate the success probability of given grasps
+
+        Args:
+            data (dict): keys should be rot_matrix, transl, joint_conf, bps_object,
+
+        Returns:
+            p_success (tensor, batch_size*1): Probability that a grasp will be successful.
+        """
+        X = data 
+        X0 = self.bn1(X)
+        X = self.rb1(X0)
+        X = self.dout(X)
+        X = self.rb2(torch.cat([X, X0], dim=1))
+        X = self.dout(X)
+        X = self.rb3(torch.cat([X, X0], dim=1))
+
+        if self.prob_flag:
+            mu, logvar = self.enc_mu(X), self.enc_logvar(X)
+            if return_mean_var:
+                return mu, logvar, self.sample(mu, logvar)
+            else:
+                return self.sample(mu, logvar)
+        else:
+            return X
+    
+    def sample(self, mu, logvar):
+        assert self.prob_flag, "Only avaialble when cfg.MODEL.BACKBONE.PROBABILISTIC is True."
+        # std = logvar.exp().pow(0.5)
+        # q_z = torch.distributions.normal.Normal(mu, std)
+        # z = q_z.rsample()
+        # return z
+    
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+    
+
 
 class BPSMLP(nn.Module):
     def __init__(self,
@@ -138,12 +200,17 @@ class BPSMLP(nn.Module):
                  **kwargs):
         super().__init__()
 
+        self.prob_flag = cfg.MODEL.BACKBONE.PROBABILISTIC
         self.bn1 = nn.BatchNorm1d(in_bps)
         self.rb1 = ResBlock(in_bps, n_neurons)
         self.rb2 = ResBlock(in_bps + n_neurons, n_neurons)
         self.rb3 = ResBlock(in_bps + n_neurons, cfg.MODEL.FLOW.CONTEXT_FEATURES)
+        if self.prob_flag: 
+            self.enc_mu = nn.Linear(cfg.MODEL.FLOW.CONTEXT_FEATURES, cfg.MODEL.FLOW.CONTEXT_FEATURES)
+            self.enc_logvar = nn.Linear(cfg.MODEL.FLOW.CONTEXT_FEATURES, cfg.MODEL.FLOW.CONTEXT_FEATURES)
+        
         self.dout = nn.Dropout(0.3)
-        self.sigmoid = nn.Sigmoid()
+        # self.sigmoid = nn.Sigmoid()
 
         self.dtype = dtype
 
@@ -154,7 +221,7 @@ class BPSMLP(nn.Module):
         self.bps_object = data["bps_object"].to(dtype=self.dtype).contiguous()
 
 
-    def forward(self, data):
+    def forward(self, data, return_mean_var=False):
         """Run one forward iteration to evaluate the success probability of given grasps
 
         Args:
@@ -173,4 +240,23 @@ class BPSMLP(nn.Module):
         X = self.dout(X)
         X = self.rb3(torch.cat([X, X0], dim=1))
 
-        return X
+        if self.prob_flag:
+            mu, logvar = self.enc_mu(X), self.enc_logvar(X)
+            if return_mean_var:
+                return mu, logvar, self.sample(mu, logvar)
+            else:
+                return self.sample(mu, logvar)
+        else:
+            return X
+    
+    def sample(self, mu, logvar):
+        assert self.prob_flag, "Only avaialble when cfg.MODEL.BACKBONE.PROBABILISTIC is True."
+        # std = logvar.exp().pow(0.5)
+        # q_z = torch.distributions.normal.Normal(mu, std)
+        # z = q_z.rsample()
+        # return z
+    
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps.mul(std).add_(mu)
+    

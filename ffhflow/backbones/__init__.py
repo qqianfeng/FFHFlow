@@ -10,5 +10,5 @@
 #         raise NotImplementedError('Backbone type is not implemented')
 
 from .pointnet import PointNetfeat
-from .ffhgenerator import FFHGenerator, BPSMLP
+from .ffhgenerator import FFHGenerator, BPSMLP, ResNet_3layer
 from .vae import BPSVAE

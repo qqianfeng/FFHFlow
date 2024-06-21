@@ -14,6 +14,14 @@ Install missing packages from pip.
 ```
 pip install -r requirements.txt
 ```
+Installing customized nflow package:
+``` 
+git submodule update --init --recursive
+```
+
+``` 
+cd dependencies/nflows & pip install -e .
+```
 
 The last step is to install prohmr as a Python package. This will allow you to import it from anywhere in your system.
 Since you might want to modify the code, we recommend installing as follows:

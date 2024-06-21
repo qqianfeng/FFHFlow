@@ -4,4 +4,4 @@
 # from .rot_flow_normal_pos_enc import GraspFlowNormalPosEnc
 # from .rot_flow_pos_enc_neg_grasp import GraspFlowPosEncNegGrasp
 # from .rot_flow_pos_enc_with_transl import GraspFlowPosEncWithTransl
-from .normflows_rot_glow_pos_enc_with_transl import NormflowsGraspFlowPosEncWithTransl
+from .normflows_rot_glow_pos_enc_with_transl import NormflowsGraspFlowPosEncWithTransl, PriorFlow

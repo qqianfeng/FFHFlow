@@ -1,5 +1,6 @@
-NAME: test_lvm_cond_gaussian_prior_flow_0.01_10k
+NAME: flow_lvm_lr1e-4_RND-1_lx0260
 BASE_PACKAGE: normflows # nflows
+RND_SEED: -1 # stochastic when set to -1 
 
 DATASETS:
   PATH: /data/net/userstore/qf/hithand_data/data/ffhnet-data # /data/hdd1/qf/hithand_data/ffhnet-data
@@ -10,15 +11,16 @@ DATASETS:
   POS_AND_NEG_GRASP: False
 
 GENERAL:
-  TOTAL_STEPS: 200000 # 300000 #100000 for train with nll and second 100000 for fintune
-  LOG_STEPS: 100
-  VAL_STEPS: 100
+  TOTAL_STEPS: 200000 # 200000, 300000 #100000 for train with nll and second 100000 for fintune
+  LOG_STEPS: 1000
+  VAL_STEPS: 1000
   # CHECKPOINT_STEPS: 100
   NUM_WORKERS: 8
 
 TRAIN:
   OPT: AdamW # SGD, AdamW
   LR: 1e-4
+  WARM_UP_STEPS: 0
   WEIGHT_DECAY: 0.0005 # 0.0005
   BATCH_SIZE: 64
   LOSS_REDUCTION: mean
@@ -29,6 +31,8 @@ TRAIN:
 LOSS_WEIGHTS:
   C: -1e4  # truncate value for loss_neg_nll
   ORTHOGONAL: 0.1
+  KL_LOSS_WEIGHT_START: 1e-7
+  KL_LOSS_WEIGHT_END: 0.1
   NLL: 1
   KL_NLL: 1
   KL_ENT: 1
@@ -39,14 +43,21 @@ LOSS_WEIGHTS:
 
 MODEL:
   BACKBONE:
-    # LATENT_DIM: 5  #FFHGenerator
+    # posterior distribution: True -> Gaussian; False -> delta;
     PROBABILISTIC: True
+    # PCD encoder
+    PCD_ENC_HIDDEN_DIM: 128
+    # Grasp encoder
+    GRASP_ENC: None
+    GRASP_ENC_PE: False
+    GRASP_ENC_HIDDEN_DIM: 64
     # PRIOR FLOW related
     PRIOR_FLOW: True
-    PRIOR_FLOW_GRASP_COND: False
-    PRIOR_FLOW_NUM_LAYERS: 4 # numbers of flow layers about [Actnorm, LULinear, Coupling]
-    PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 256
-    PRIOR_FLOW_LAYER_DEPTH: 2 # number of resblock in resnet
+    PRIOR_FLOW_COND: True # input-conditioned
+    PRIOR_FLOW_BASE: "gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
+    PRIOR_FLOW_NUM_LAYERS: 8 # numbers of flow layers about [Actnorm, LULinear, Coupling]
+    PRIOR_FLOW_LAYER_HIDDEN_FEATURES: 512
+    PRIOR_FLOW_LAYER_DEPTH: 4 # number of resblock in resnet
   FLOW:
     BASE: "cond_gaussian" # gmm, gaussian, cond_gaussian, cond_rsb
     # RSB related
@@ -59,7 +70,7 @@ MODEL:
     GMM_TRAINABLE: True
     # DIM should be 136 for normflow package (split requires even number)
     # DIM is 135 for nflows pacakge.
-    DIM: 136 # input dims, also the same dim for base distribution of standard norm
+    DIM: 136 # input dims, 136： positional encoding; 22(3+3+16): no position encoding
     CONTEXT_FEATURES: 128 # features dim from backbone (TODO: try context_features same dim as DIM)
     NUM_LAYERS: 8 # numbers of layers about [Actnorm, LULinear, Coupling]
     LAYER_HIDDEN_FEATURES: 512 #1024 # hidden layer dims in resnet inside Glow

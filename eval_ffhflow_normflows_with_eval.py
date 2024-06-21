@@ -6,7 +6,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import sys
-# TODO fix this hardcoded path
 # clone this repo https://github.com/qianbot/nflows
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
@@ -24,9 +23,9 @@ def load_batch(path):
     return torch.load(path, map_location="cuda:0")
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-4_best/hparams.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/hparams.yaml', help='Path to config file')
 # parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--ckpt_path', type=str, default='/data/hdd1/qf/ffhflow_model_history/flow_lvm/flow_lvm_lr1e-5_2/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
 parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
 args = parser.parse_args()
@@ -46,7 +45,7 @@ ckpt_path = args.ckpt_path
 if "cnf" in args.model_cfg:
     model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
 else:
-    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg,skip_initialization=True)
 
 model.eval()
 
@@ -54,7 +53,6 @@ model.eval()
 val_loader = ffh_datamodule.val_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
-save_path = '/home/yb/Documents/ffhflow_grasp'
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -71,7 +69,8 @@ if run_t_sne:
                 for idx in range(len(batch['obj_name'])):
                     # palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
                     # grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
-                    out, cond_feat = model.sample_in_experiment(batch['bps_object'][idx], num_samples=100, return_cond_feat=True)
+
+                    out, cond_feat = model.sample(batch, idx, num_samples=100, return_arr=True, return_cond_feat=True)
                     cond_feat = cond_feat.cpu().numpy()
                     obj_name_list.append(np.asarray([batch['obj_name'][idx]])[:, np.newaxis])
                     cond_feat_list.append(cond_feat)
@@ -162,38 +161,64 @@ if MAAD:
     num_nan_transl = 0
     num_nan_rot = 0
     num_nan_joint = 0
-    tmp_transl_sum = 2.717126583509403
-    tmp_rot_sum = 6101.889077039017
-    tmp_joint_sum = 5175.546305659608
 
-    loss_per_item = {
-        'kit_BakingSoda':[0,0,0],
-        # 'kit_BathDetergent':[0,0,0],
-        'kit_BroccoliSoup':[0,0,0],
-        'kit_CoughDropsLemon':[0,0,0],
-        'kit_Curry':[0,0,0],
-        'kit_FizzyTabletsCalcium':[0,0,0],
-        # 'kit_InstantSauce':[0,0,0],
-        'kit_NutCandy':[0,0,0],
-        'kit_PotatoeDumplings':[0,0,0],
-        # 'kit_Sprayflask':[0,0,0],
-        'kit_TomatoSoup':[0,0,0],
-        'kit_YellowSaltCube2':[0,0,0],
-        'kit_Peanuts':[0,0,0]
-    }
+    # loss_per_item = {
+    #     'kit_BakingSoda':[0,0,0],
+    #     'kit_BathDetergent':[0,0,0],
+    #     'kit_BroccoliSoup':[0,0,0],
+    #     'kit_CoughDropsLemon':[0,0,0],
+    #     'kit_Curry':[0,0,0],
+    #     'kit_FizzyTabletsCalcium':[0,0,0],
+    #     'kit_InstantSauce':[0,0,0],
+    #     'kit_NutCandy':[0,0,0],
+    #     'kit_PotatoeDumplings':[0,0,0],
+    #     'kit_Sprayflask':[0,0,0],
+    #     'kit_TomatoSoup':[0,0,0],
+    #     'kit_YellowSaltCube2':[0,0,0],
+    #     # 'kit_Peanuts':[0,0,0]
+    # }
+    ## initialize ffhevaluator
+    # git clone FFHNet and switch to ffhnet-origin-sim-exp branch
+    ffhnet_path = '/home/yb/Projects/hithand_ws/src/FFHNet-dev'
+    sys.path.insert(0,ffhnet_path)
 
-    with torch.no_grad():
-        batch = load_batch('eval_batch.pth')
-        # batch = load_batch('eval_batch_correct_eval.pth')
-        print(batch['obj_name'])
+    from FFHNet.models.ffhnet import FFHNet
+    from FFHNet.config.eval_config import EvalConfig
+    cfg = EvalConfig().parse()
+
+    FFHNet = FFHNet(cfg)
+    ffhnet_model_path = '/data/hdd1/qf/hithand_data/'
+    FFHNet.load_ffhgenerator(epoch=10,
+                                    load_path=os.path.join(ffhnet_model_path, 'models/ffhgenerator'))
+    FFHNet.load_ffhevaluator(epoch=30,
+                                    load_path=os.path.join(ffhnet_model_path, 'models/ffhevaluator'))
+    # run with fixed batch
+    # with torch.no_grad():
+    #     batch = load_batch('eval_batch.pth')
+    #     # batch = load_batch('eval_batch_correct_eval.pth')
+    # run whole eval set
+    for i, batch in enumerate(val_loader):
+        print(i)
+        for k,v in batch.items():
+            if k !='pcd_path' and k !='obj_name':
+                batch[k] = v.to('cuda')
         for idx in range(len(batch['obj_name'])):
             palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
             out = model.sample(batch, idx, num_samples=args.num_samples)
+            bps_np = batch['bps_object'][idx].cpu().numpy()
 
-            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt,L1=True)
+            grasp_dict = FFHNet.filter_grasps(bps_np, out, thresh=0.5, return_arr=True)
+            for k,v in grasp_dict.items():
+                if k == 'rot_matrix':
+                    grasp_dict[k] = grasp_dict[k][0].reshape(1,3,3)
+                else:
+                    grasp_dict[k] = grasp_dict[k][0].reshape(1,-1)
+            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(grasp_dict, grasps_gt)
+
+            # transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
                 transl_loss_sum += transl_loss
                 rot_loss_sum += rot_loss
@@ -207,9 +232,9 @@ if MAAD:
                     num_nan_joint += 1
                 num_nan_out += 1
             coverage_sum += coverage
-            loss_per_item[batch['obj_name'][idx]][0] += transl_loss #/tmp_transl_sum
-            loss_per_item[batch['obj_name'][idx]][1] += rot_loss  #/tmp_rot_sum
-            loss_per_item[batch['obj_name'][idx]][2] += joint_loss  #/tmp_joint_sum
+            # loss_per_item[batch['obj_name'][idx]][0] += transl_loss
+            # loss_per_item[batch['obj_name'][idx]][1] += rot_loss
+            # loss_per_item[batch['obj_name'][idx]][2] += joint_loss
 
         coverage_mean = coverage_sum / len(batch['obj_name'])
         num_grasp = args.num_samples * len(batch['obj_name'])
@@ -220,26 +245,28 @@ if MAAD:
         print(f'joint_loss_sum: {joint_loss_sum:.3f}')
         print(f'joint_loss_mean per grasp (rad^2): {joint_loss_sum/num_grasp:.3f}')
         print(f'coverage: {coverage_mean:.3f}')
+        if i >=10:
+            break
         # for k, v in loss_per_item.items():
         #     print(k,v)
-        transl_list = []
-        rot_list = []
-        joint_list = []
-        for k, v in loss_per_item.items():
-            print(k,v)
-            transl_list.append(v[0])
-            rot_list.append(v[1])
-            joint_list.append(v[2])
-        transl_list_np = np.std(transl_list)
-        rot_list_np = np.std(rot_list)
-        joint_list_np = np.std(joint_list)
-        print(transl_list_np)
-        print(rot_list_np)
-        print(joint_list_np)
-        print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
-        print(f'invalid transl output is: {num_nan_transl}/{len(batch["obj_name"])}')
-        print(f'invalid rot output is: {num_nan_rot}/{len(batch["obj_name"])}')
-        print(f'invalid joint output is: {num_nan_joint}/{len(batch["obj_name"])}')
+        # transl_list = []
+        # rot_list = []
+        # joint_list = []
+        # for k, v in loss_per_item.items():
+        #     print(k,v)
+        #     transl_list.append(v[0])
+        #     rot_list.append(v[1])
+        #     joint_list.append(v[2])
+        # transl_list_np = np.std(transl_list)
+        # rot_list_np = np.std(rot_list)
+        # joint_list_np = np.std(joint_list)
+        # print(transl_list_np)
+        # print(rot_list_np)
+        # print(joint_list_np)
+        # print(f'invalid output is: {num_nan_out}/{len(batch["obj_name"])}')
+        # print(f'invalid transl output is: {num_nan_transl}/{len(batch["obj_name"])}')
+        # print(f'invalid rot output is: {num_nan_rot}/{len(batch["obj_name"])}')
+        # print(f'invalid joint output is: {num_nan_joint}/{len(batch["obj_name"])}')
 
     ###########################
 

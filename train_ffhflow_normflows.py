@@ -1,44 +1,99 @@
-import os
+import os, time
 import argparse
 import shutil
-
+import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
+
+# sets seeds for numpy, torch and python.random.
 import sys
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl
+from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
 
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
+parser.add_argument('--resume_ckp', type=str, default=None, help='Directory to checkpoints to be resumed')
 
 args = parser.parse_args()
 
+def crete_logging_file(log_folder):
+    # time_str = time.ctime().replace(" ", "")
+    time_str = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    log_file = f"{log_folder}/{time_str}.txt"
+    os.system(f"echo 'Host:' $(hostname) | tee -a {log_file}")
+    os.system(f"echo 'Conda:' $(which conda) | tee -a {log_file}")
+    os.system(f"echo $(pwd) | tee -a {log_file}")
+    os.system(f"echo 'Version:' $(VERSION) | tee -a {log_file}")
+    os.system(f"echo 'Git diff:'| tee -a {log_file}")
+    os.system(f"git diff | tee -a {log_file}")
+    os.system(f"nvidia-smi| tee -a {log_file}")
+    log_file = f"{log_folder}/{time_str}.log"
+    return log_file
+
 # Set up cfg
 cfg = get_config(args.model_cfg)
+print(f"cfg: {cfg}")
+
+pl_train_deterministic = False
+random_seed = cfg.get("RND_SEED", -1)
+if random_seed > -1: 
+    pl.seed_everything(random_seed, workers=True)
+    np.random.seed(random_seed)
+    pl_train_deterministic = True
 
 # Setup Tensorboard logger
-logger = TensorBoardLogger(os.path.join(args.root_dir, cfg['NAME']), name='', version='', default_hp_metric=False)
-
+log_folder = os.path.join(args.root_dir, cfg['NAME'])
+logger = TensorBoardLogger(log_folder, name='', version='', default_hp_metric=False)
+os.makedirs(log_folder, exist_ok=True) 
+crete_logging_file(log_folder)
 # Set up model
 # model = FFHFlow(cfg)
-model = NormflowsFFHFlowPosEncWithTransl(cfg)
+# model = NormflowsFFHFlowPosEncWithTransl(cfg)
+if "cnf" in args.model_cfg:
+    model = NormflowsFFHFlowPosEncWithTransl(cfg)
+else:
+    model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
 
 # Setup checkpoint saving
-checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=
-                        os.path.join(args.root_dir, cfg['NAME']),
+save_folder = os.path.join(args.root_dir, cfg['NAME'])
+checkpoint_callback = pl.callbacks.ModelCheckpoint(dirpath=save_folder,
                         every_n_train_steps=10000,
                         save_top_k=-1)
+
+# copy the config file to save_dir
+if not os.path.exists(save_folder):
+    os.mkdir(save_folder)
+else: # remove tf files only for better monitoring in tensorboard
+    files = os.listdir(save_folder)
+    for f in files:
+        if "events.out.tfevents" in f:
+            print(f"Removing {f}!!!")
+            os.remove(os.path.join(save_folder, f))
+
+fname = os.path.join(save_folder, 'hparams.yaml')
+if args.resume_ckp is None: # new training folder
+    if os.path.isfile(fname):
+        print(f"Removing {fname}!!!")
+        os.remove(fname)
+    print(f"Copying {args.model_cfg} to {fname}!!!")
+    shutil.copy(args.model_cfg, fname)
+else: # resuming training
+    # print(f"Removing {fname} before copying!!!")
+    # os.remove(fname)
+    fname = fname.replace("hparams", "hparams_new")
+    print(f"Copying {args.model_cfg} to {fname}!!!")
+    shutil.copy(args.model_cfg, fname)
 
 # configure dataloader
 ffh_datamodule = FFHDataModule(cfg)
 
 # Setup PyTorch Lightning Trainer
-ckpt_path = 'checkpoints/normflow_affine_old_best_param_gmm2_trainable/epoch=17-step=209999.ckpt'
+ckpt_path = args.resume_ckp # 'checkpoints/test_lvm1/epoch=12-step=149999.ckpt'
 
 trainer = pl.Trainer(default_root_dir=args.root_dir,
                      logger=logger,
@@ -52,15 +107,9 @@ trainer = pl.Trainer(default_root_dir=args.root_dir,
                      precision=16,
                      max_steps=cfg.GENERAL.TOTAL_STEPS,
                      move_metrics_to_cpu=True,
-                     callbacks=[checkpoint_callback])
-                    #  resume_from_checkpoint=ckpt_path)
+                     callbacks=[checkpoint_callback],
+                     resume_from_checkpoint=ckpt_path,
+                     deterministic=pl_train_deterministic)
 
 # Train the model
 trainer.fit(model, datamodule=ffh_datamodule)
-
-# copy the config file to save_dir
-fname = os.path.join(args.root_dir, cfg['NAME'], 'hparams.yaml')
-if os.path.isfile(fname):
-    os.remove(fname)
-
-shutil.copy(args.model_cfg, fname)
