@@ -8,7 +8,6 @@ import pickle
 
 import open3d as o3d
 import sys
-# clone this repo https://github.com/qianbot/nflows
 sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
 import subprocess
 
@@ -17,7 +16,8 @@ from ffhflow.datasets import FFHDataModule
 from ffhflow.utils.metrics import maad_for_grasp_distribution, maad_for_grasp_distribution_reversed
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
-from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
+from ffhflow.ffhflow_cnf import NormflowsFFHFlowPosEncWithTransl
+from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl_LVM
 
 def save_batch_to_file(batch):
     torch.save(batch, "eval_batch.pth")
@@ -42,8 +42,10 @@ ffh_datamodule = FFHDataModule(cfg)
 # Setup PyTorch Lightning Trainer
 ckpt_path = args.ckpt_path
 
-# model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
-model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+if "cnf" in args.model_cfg:
+    model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
+else:
+    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 # val_loader = ffh_datamodule.val_dataloader(shuffle=True)

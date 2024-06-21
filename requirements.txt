@@ -21,4 +21,3 @@ torchmetrics==0.6.0
 pandas
 transforms3d
 scikit-learn
-git+https://github.com/nkolot/nflows.git

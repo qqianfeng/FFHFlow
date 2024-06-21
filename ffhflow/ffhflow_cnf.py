@@ -56,74 +56,35 @@ def rot_6D_l2_loss(pred_rot_6D,
 
     return l2_loss_rot
 
+class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
-class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
-
-    def __init__(self, cfg: CfgNode, skip_initialization=False):
+    def __init__(self, cfg: CfgNode):
         """
-        Implementing the FFHFlow based on a latent variable model, in order to maximize log_P(G|X) = log_[Integral_z{P(G|z,X)P(z|X)}],
-        where G is the grasp configuration, X is the point clouds, z is the shape latents. With Jensen inequality, the ELBO can be derived:
-        ELBO = E_p(z|G,X){log_P(G|z,X)} - E_p(z|G,X){log_P(z|G,X))-log_P(z|X))};
-
-        Model components:
-        There are two encoders and two conditional flows in this model.
-        One encoder for partially observed point clouds(enc_pcd), another one for grasps(enc_grasp), together constructing the posterior inference network P(z|G,X);
-        One cond flow for prior P(z|X) conditioning on feats from enc_pcd , another cond flow for the likelihoods P(G|z,X) conditioning on samples from P(z|G,X);
-
+        Setup ProHMR model
         Args:
             cfg (CfgNode): Config file as a yacs CfgNode
         """
         super().__init__()
 
         self.cfg = cfg
-        self.prob_backbone = cfg.MODEL.BACKBONE.PROBABILISTIC
-        self.prior_flow_flag = cfg.MODEL.BACKBONE.PRIOR_FLOW
-        self.prior_flow_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_COND
-        self.grasp_enc_flag = cfg.MODEL.BACKBONE.GRASP_ENC
-        self.grasp_input_pe = cfg.MODEL.BACKBONE.GRASP_ENC_PE
-        self.warmup_steps = cfg.TRAIN.WARM_UP_STEPS
 
-        # point cloud encoder
-        # self.pcd_enc = PointNetfeat(global_feat=True, feature_transform=False)
-        self.pcd_enc = ResNet_3layer(out_dim=cfg.MODEL.BACKBONE.PCD_ENC_HIDDEN_DIM)
+        # Create backbone feature extractor
+        # self.backbone = PointNetfeat(global_feat=True, feature_transform=False)
+        self.backbone = BPSMLP(cfg)
 
-        # grasp feats
-        if self.grasp_input_pe:
-            grasp_in_dim = 60 + 60 + 16
-        else:
-            grasp_in_dim = 3 + 3 + 16
-        if self.grasp_enc_flag != 'None':
-            self.grasp_enc = ResNet_3layer(in_dim=grasp_in_dim,
-                                           out_dim=cfg.MODEL.BACKBONE.GRASP_ENC_HIDDEN_DIM)
-            grasp_feat_dim = cfg.MODEL.BACKBONE.GRASP_ENC_HIDDEN_DIM
-        else:
-            self.grasp_enc = None
-            grasp_feat_dim = grasp_in_dim
-
-        # dim after concatenating pcd feats and grasp feats
-        posterior_nn_in_dim = grasp_feat_dim + cfg.MODEL.BACKBONE.PCD_ENC_HIDDEN_DIM
-
-        # posterior inference network P(z|G,X)
-        self.posterior_nn = ResNet_3layer(in_dim=posterior_nn_in_dim,
-                                          out_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
-                                          prob_flag=self.prob_backbone)
-
-        # # free param in prior_flow at the beginning, trigger after linear annealing
-        # for param in self.prior_flow.parameters():
+        # # free param in backbone
+        # for param in self.backbone.parameters():
         #     param.requires_grad = False
 
-        # grasp flow
         self.flow = GraspFlowGenerator(cfg)
 
-        # prior flow conditioning on pcd feats
-        if self.prior_flow_flag:
-            self.prior_flow = LatentFlowPrior(cfg)
-        else:
-            self.prior_flow = None
-        if skip_initialization:
-            self.initialized = True
-        else:
-            self.initialized = False
+        self.kl_loss = kl_divergence
+        self.rot_6D_l2_loss = rot_6D_l2_loss
+        self.transl_l2_loss = transl_l2_loss
+
+        self.L2_loss = torch.nn.MSELoss(reduction='mean')
+
+        self.initialized = False
         self.automatic_optimization = False
 
     def configure_optimizers(self) -> Tuple[torch.optim.Optimizer, torch.optim.Optimizer]:
@@ -132,15 +93,8 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         Returns:
             Tuple[torch.optim.Optimizer, torch.optim.Optimizer]: Model and discriminator optimizers
         """
-        trainable_params = list(self.pcd_enc.parameters()) + \
-                           list(self.posterior_nn.parameters()) + \
+        trainable_params = list(self.backbone.parameters()) + \
                            list(self.flow.parameters())
-
-        if self.grasp_enc is not None:
-            trainable_params += list(self.grasp_enc.parameters())
-
-        if self.prior_flow_flag:
-            trainable_params += list(self.prior_flow.parameters())
 
         if self.cfg.TRAIN.OPT == "AdamW":
             optimizer = torch.optim.AdamW(params=trainable_params,
@@ -151,18 +105,8 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
             optimizer = torch.optim.SGD(params=trainable_params,
                                     lr=self.cfg.TRAIN.LR,
                                     momentum=0.9)
-        # scheduler = torch.optim.LinearWarmupCosineAnnealingLR(optimizer, warmup_epochs=10, max_epochs=40)
-        if self.warmup_steps > 0:
-            scheduler = torch.optim.lr_scheduler.LinearLR(
-                optimizer,
-                start_factor=0.001,
-                end_factor=1.0,
-                total_iters=self.warmup_steps,
-            )
-            opt_dict = {"optimizer": optimizer, "lr_scheduler": scheduler}
-        else:
-            opt_dict = {"optimizer": optimizer}
-        return opt_dict
+
+        return optimizer
 
     def initialize(self, batch: Dict, conditioning_feats: torch.Tensor):
         """
@@ -175,16 +119,7 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # Necessary to initialize ActNorm layers.
 
         with torch.no_grad():
-            fake_latents = torch.ones([conditioning_feats.shape[0], self.cfg.MODEL.FLOW.CONTEXT_FEATURES]).cuda()
-            # init prior flow
-            if self.prior_flow_flag:
-                if self.prior_flow_cond:
-                    _ = self.prior_flow.log_prob(fake_latents, conditioning_feats)
-                else:
-                    _ = self.prior_flow.log_prob(fake_latents)
-
-            # init grasp flow
-            _, _ = self.flow.log_prob(batch, fake_latents)
+            _, _ = self.flow.log_prob(batch, conditioning_feats)
 
             self.initialized = True
 
@@ -202,15 +137,14 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         else:
             num_samples = self.cfg.TRAIN.NUM_TEST_SAMPLES
 
-        # extract point clouds: bz * 4096
-        bps_pcd = batch["bps_object"].to(dtype=torch.float64).contiguous()
-        bps_pcd = torch.cat([self.bps_object], dim=1)
+        # change dim of joint conf to 16 for split
+        if self.cfg['BASE_PACKAGE'] == 'normflows':
+            new_joint_conf = torch.zeros((batch['joint_conf'].shape[0],16)).to('cuda')
+            new_joint_conf[:,:15] = batch['joint_conf']
+            batch['joint_conf'] = new_joint_conf
 
-        # extractt pcd feats
-        pcd_feats = self.pcd_enc(bps_pcd)
-
-        # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats)
+        # Compute keypoint features using the ffhgenerator encoder -> {'mu': mu, 'logvar': logvar}, each of [5,]
+        conditioning_feats = self.backbone(batch)
 
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
@@ -227,15 +161,6 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         output['conditioning_feats'] = conditioning_feats
         return output
 
-    def update_kl_weight(self):
-        total_steps = self.cfg.GENERAL.TOTAL_STEPS
-        w_start = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_START
-        w_end = self.cfg.LOSS_WEIGHTS.KL_LOSS_WEIGHT_END
-        increment = (w_end - w_start) / (total_steps) # (2*total_steps)
-        kl_cof = w_start + self.global_step * increment
-        return kl_cof
-
-
     def compute_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
         """
         Compute losses given the input batch and the regression output
@@ -247,56 +172,53 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
             torch.Tensor : Total loss for current batch
         """
 
-        # change dim of joint conf to 16 for split
+        # 1. Reconstruction loss
+        pred_angles = output['pred_angles'].view(-1,3)
+        pred_pose_transl = output['pred_pose_transl'].view(-1,3)
+        pred_joint_conf = output['pred_joint_conf'].view(-1,16)
+        pred_joint_conf = pred_joint_conf[:,:15]
+        gt_angles = batch['angle_vector']  # [batch_size, 3,3]
+        gt_transl = batch['transl']
+        gt_joint_conf = batch['joint_conf'][:,:15]
+        rot_loss = self.transl_l2_loss(pred_angles, gt_angles, self.L2_loss, self.device)
+        transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
+        joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
+
+        # TODO: add joint as loss
+
+        # 2. Compute NLL loss
+        conditioning_feats = self.backbone(batch)
+
+        # grasp -> z
         if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
             padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
             batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
+        log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
+        loss_nll = -log_prob.mean()
 
-        gt_angles = batch['angle_vector']  # [batch_size, 3]
-        gt_transl = batch['transl'] # [batch_size, 3]
-        gt_joint_conf = batch['joint_conf'] # [batch_size, 16]
-        # bz * 22
-        grasps = torch.cat([gt_angles, gt_transl, gt_joint_conf], dim=1)
+        # 3: Compute orthonormal loss on 6D representations
+        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
+        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
+        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
 
-        # extract point clouds: bz * 4096
-        bps_pcd = batch["bps_object"].to(dtype=torch.float64).contiguous()
-        bps_pcd = torch.cat([bps_pcd], dim=1)
+        # combine all the losses
+        # loss = self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll
+        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+        #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
+        loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
+        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
+        #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
-        # extractt pcd feats: bz * 128
-        pcd_feats = self.pcd_enc(bps_pcd)
+        losses = dict(loss=loss.detach(),
+                    loss_nll=loss_nll.detach(),
+                    rot_loss=rot_loss.detach(),
+                    joint_conf_loss=joint_conf_loss.detach(),
+                    transl_loss=transl_loss.detach())
+                    # loss_pose_6d=loss_pose_6d.detach(),
 
-        # concat pcd feats and grasps: bz * (128+22)
-        pcd_grasps_feats = torch.cat([pcd_feats, grasps], dim=1)
-
-        # infer posterior of latents P(Z|X,G)
-        if self.prob_backbone:
-            cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
-        else:
-            conditioning_feats = self.posterior_nn(pcd_grasps_feats)
-
-        # sample from prior flow
-        latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
-        kl_nll = -latent_prior_ll.mean()
-
-        # grasp flow
-        grasp_ll, _ = self.flow.log_prob(batch, conditioning_feats)
-        grasp_nll = -grasp_ll.mean()
-
-        # Compute KL divergence between shape posterior and prior
-        if self.prob_backbone:
-            kl_ent = gaussian_ent(cond_logvar)
-            kl_loss = self.cfg.LOSS_WEIGHTS['KL_NLL'] * kl_nll - self.cfg.LOSS_WEIGHTS['KL_ENT'] * kl_ent
-            kl_cof = self.update_kl_weight()
-            kl_cof = torch.Tensor([kl_cof]).cuda()
-            loss = kl_cof * kl_loss + self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll
-
-        output['losses'] = dict(loss=loss.detach(),
-                                grasp_nll=grasp_nll.detach(),
-                                kl_nll=kl_nll.detach(),
-                                kl_ent=kl_ent.detach(),
-                                kl_loss=kl_loss.detach(),
-                                kl_weight=kl_cof.detach())
-                                # loss_pose_6d=loss_pose_6d.detach(),
+        output['losses'] = losses
 
         return loss
 
@@ -323,18 +245,13 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         """
         batch = joint_batch
         optimizer = self.optimizers(use_pl_optimizer=True)
-        output = {} # self.forward_step(batch, train=True)
+        output = self.forward_step(batch, train=True)
         loss = self.compute_loss(batch, output, train=True)
 
         optimizer.zero_grad()
         self.manual_backward(loss)
         # clip_grad_norm(optimizer, max_norm=100)
         optimizer.step()
-        if self.warmup_steps > 0:
-            if self.global_step < self.warmup_steps:
-                scheduler = self.lr_schedulers()
-                scheduler.step()
-        output["losses"].update({"lr": torch.Tensor([optimizer. param_groups[0]["lr"]])})
 
         if self.global_step > 0 and self.global_step % self.cfg.GENERAL.LOG_STEPS == 0:
             self.tensorboard_logging(batch, output, self.global_step, train=True)
@@ -350,9 +267,9 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         Returns:
             Dict: Dictionary containing regression output.
         """
-        output = {} # self.forward_step(batch, train=False)
+        output = self.forward_step(batch, train=False)
         loss = self.compute_loss(batch, output, train=False)
-        # output['loss'] = loss
+        output['loss'] = loss
         self.tensorboard_logging(batch, output, self.global_step, train=False)
 
         return output
@@ -373,7 +290,7 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         losses = output['losses']
 
         for loss_name, val in losses.items():
-            summary_writer.add_scalar(mode + '/' + loss_name, val.item(), step_count)
+            summary_writer.add_scalar(mode + '/' + loss_name, val.detach().item(), step_count)
 
     def predict_log_prob(self, bps, grasps):
         """_summary_
@@ -387,10 +304,7 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
             _type_: _description_
         """
         bps_tensor = bps.to('cuda')
-
-        # move model to cuda
-        self.prior_flow.to('cuda')
-        self.pcd_enc.to('cuda')
+        self.backbone.to('cuda')
         self.flow.to('cuda')
 
         batch = {}
@@ -404,16 +318,7 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         batch['transl'] = grasps['pred_pose_transl']
         batch['joint_conf'] = grasps['joint_conf']
 
-
-        # extractt pcd feats
-        pcd_feats = self.pcd_enc(bps_tensor)
-
-        # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats)
-
-        # If ActNorm layers are not initialized, initialize them
-        if not self.initialized:
-            self.initialize(batch, conditioning_feats)
+        conditioning_feats = self.backbone(batch)
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
 
         return log_prob
@@ -428,88 +333,16 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         Returns:
             tensor: _description_
         """
-        if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
-            padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
-            batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
-
         # move data to cuda
-        bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda')
+        bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda') # old: bps.to('cuda')
         bps_tensor = bps_tensor.view(1,-1)
 
-        # move model to cuda
-        self.prior_flow.to('cuda')
-        self.pcd_enc.to('cuda')
+        batch = {'bps_object': bps_tensor}
+        self.backbone.to('cuda')
         self.flow.to('cuda')
 
-        # extractt pcd feats
-        pcd_feats = self.pcd_enc(bps_tensor)
-        # If ActNorm layers are not initialized, initialize them
-        if not self.initialized:
-            batch_size = batch['bps_object'].shape[0]
-            pcd_feats_temp = pcd_feats.repeat(batch_size, 1)
-            self.initialize(batch, pcd_feats_temp)
-            del pcd_feats_temp
-
-        # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-
-        # z -> grasp
-        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-
-        log_prob = log_prob.view(-1)
-        pred_angles = pred_angles.view(-1,3)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
-        pred_joint_conf = pred_joint_conf.view(-1, 16)
-        pred_joint_conf = pred_joint_conf[:,:15]
-
-        output = {}
-        output['log_prob'] = log_prob
-        output['pred_angles'] = pred_angles
-        output['pred_pose_transl'] = pred_pose_transl
-        output['pred_joint_conf'] = pred_joint_conf
-
-        # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output)
-
-        return output
-
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False):
-        """ generate number of grasp samples for experiment, where each inference takes only one bps
-
-        Args:
-            bps (torch.Tensor): one bps object
-            num_samples (int): _description_
-
-        Returns:
-            tensor: _description_
-        """
-        # if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
-        #     padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
-        #     batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
-
-        # move data to cuda
-        bps_tensor = bps.to(dtype=torch.float64).to('cuda')
-        bps_tensor = bps_tensor.view(1,-1)
-
-        # move model to cuda
-        self.prior_flow.to('cuda')
-        self.pcd_enc.to('cuda')
-        self.flow.to('cuda')
-
-        time1 = time()
-        # extract pcd feats
-        pcd_feats = self.pcd_enc(bps_tensor)
-        time2 = time()
-        print('pcd_enc takes:',time2-time1)
-
-        # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-        time3 = time()
-        print('prior_flow takes:',time3-time2)
-        # z -> grasp
-        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-        print('grasp flow takes:',time()-time3)
-        print('ffhflow in total takes:',time()-time1)
+        conditioning_feats = self.backbone(batch)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
         pred_pose_transl = pred_pose_transl.view(-1,3)
@@ -525,11 +358,7 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
         # convert position encoding to original format of matrix or vector
         output = self.convert_output_to_grasp_mat(output, return_arr=False)
 
-        if return_cond_feat:
-            return output, pcd_feats
-        else:
-            return output
-
+        return output
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
 
@@ -643,5 +472,5 @@ class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
             centr_T_palm[:3,-1] = samples['transl'][i]
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
-
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
+

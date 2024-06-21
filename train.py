@@ -1,18 +1,16 @@
-import os, time
 import argparse
+import os
 import shutil
+import time
+
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
-# sets seeds for numpy, torch and python.random.
-import sys
-sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
-
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
-
+from ffhflow.ffhflow_cnf import NormflowsFFHFlowPosEncWithTransl
+from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl_LVM
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
 parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
@@ -39,6 +37,7 @@ def crete_logging_file(log_folder):
 cfg = get_config(args.model_cfg)
 print(f"cfg: {cfg}")
 
+# sets seeds for numpy, torch and python.random.
 pl_train_deterministic = False
 random_seed = cfg.get("RND_SEED", -1)
 if random_seed > -1:
@@ -51,9 +50,8 @@ log_folder = os.path.join(args.root_dir, cfg['NAME'])
 logger = TensorBoardLogger(log_folder, name='', version='', default_hp_metric=False)
 os.makedirs(log_folder, exist_ok=True)
 crete_logging_file(log_folder)
+
 # Set up model
-# model = FFHFlow(cfg)
-# model = NormflowsFFHFlowPosEncWithTransl(cfg)
 if "cnf" in args.model_cfg:
     model = NormflowsFFHFlowPosEncWithTransl(cfg)
 else:
