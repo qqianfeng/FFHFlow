@@ -323,6 +323,10 @@ class NormflowsFFHFlowPosEncWithTransl(Metaclass):
 
         return log_prob
 
+    """ TODO: maybe sample should be like this if not working
+    def sample(self, bps, num_samples,return_arr=False):
+        bps_tensor = bps.to('cuda')
+    """
     def sample(self, batch, idx, num_samples):
         """ generate number of grasp samples
 
