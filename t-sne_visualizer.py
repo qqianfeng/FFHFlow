@@ -16,11 +16,11 @@ from ffhflow.datasets import FFHDataModule
 from ffhflow.utils.metrics import maad_for_grasp_distribution, maad_for_grasp_distribution_reversed
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 
-from ffhflow.ffhflow_cnf import NormflowsFFHFlowPosEncWithTransl
-from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl_LVM
+from ffhflow.ffhflow_cnf import FFHFlowCNF
+from ffhflow.ffhflow_lvm import FFHFlowLVM
 
 def save_batch_to_file(batch):
-    torch.save(batch, "eval_batch.pth")
+    torch.save(batch, "data/eval_batch.pth")
 
 def load_batch(path):
     return torch.load(path, map_location="cuda:0")
@@ -43,9 +43,9 @@ ffh_datamodule = FFHDataModule(cfg)
 ckpt_path = args.ckpt_path
 
 if "cnf" in args.model_cfg:
-    model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
+    model = FFHFlowCNF.load_from_checkpoint(ckpt_path, cfg=cfg)
 else:
-    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    model = FFHFlowLVM.load_from_checkpoint(ckpt_path, cfg=cfg)
 model.eval()
 
 # val_loader = ffh_datamodule.val_dataloader(shuffle=True)

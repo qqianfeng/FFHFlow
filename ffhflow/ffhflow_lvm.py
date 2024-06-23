@@ -57,7 +57,7 @@ def rot_6D_l2_loss(pred_rot_6D,
     return l2_loss_rot
 
 
-class NormflowsFFHFlowPosEncWithTransl_LVM(Metaclass):
+class FFHFlowLVM(Metaclass):
 
     def __init__(self, cfg: CfgNode, skip_initialization=False):
         """

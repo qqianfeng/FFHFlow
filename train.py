@@ -9,11 +9,11 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.ffhflow_cnf import NormflowsFFHFlowPosEncWithTransl
-from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl_LVM
+from ffhflow.ffhflow_cnf import FFHFlowCNF
+from ffhflow.ffhflow_lvm import FFHFlowLVM
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/ffhflow_cnf.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 parser.add_argument('--resume_ckp', type=str, default=None, help='Directory to checkpoints to be resumed')
 
@@ -53,9 +53,9 @@ crete_logging_file(log_folder)
 
 # Set up model
 if "cnf" in args.model_cfg:
-    model = NormflowsFFHFlowPosEncWithTransl(cfg)
+    model = FFHFlowCNF(cfg)
 else:
-    model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
+    model = FFHFlowLVM(cfg)
 
 # Setup checkpoint saving
 save_folder = os.path.join(args.root_dir, cfg['NAME'])

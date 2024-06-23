@@ -9,14 +9,14 @@ from sklearn.manifold import TSNE
 
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.ffhflow_cnf import NormflowsFFHFlowPosEncWithTransl
-from ffhflow.ffhflow_lvm import NormflowsFFHFlowPosEncWithTransl_LVM
+from ffhflow.ffhflow_cnf import FFHFlowCNF
+from ffhflow.ffhflow_lvm import FFHFlowLVM
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 from ffhflow.utils.metrics import maad_for_grasp_distribution
 
 
 def save_batch_to_file(batch):
-    torch.save(batch, "eval_batch.pth")
+    torch.save(batch, "data/eval_batch.pth")
 
 def load_batch(path):
     return torch.load(path, map_location="cuda:0")
@@ -40,9 +40,9 @@ ffh_datamodule = FFHDataModule(cfg)
 ckpt_path = args.ckpt_path
 
 if "cnf" in args.model_cfg:
-    model = NormflowsFFHFlowPosEncWithTransl.load_from_checkpoint(ckpt_path, cfg=cfg)
+    model = FFHFlowCNF.load_from_checkpoint(ckpt_path, cfg=cfg)
 else:
-    model = NormflowsFFHFlowPosEncWithTransl_LVM.load_from_checkpoint(ckpt_path, cfg=cfg)
+    model = FFHFlowLVM.load_from_checkpoint(ckpt_path, cfg=cfg)
 
 model.eval()
 
@@ -51,7 +51,6 @@ val_loader = ffh_datamodule.val_dataloader()
 val_dataset = ffh_datamodule.val_dataset()
 
 # path to save results
-save_path = '/home/yb/Documents/ffhflow_grasp'
 grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
 grasp_data = GraspDataHandlerVae(grasp_data_path)
 
@@ -89,8 +88,8 @@ if MAAD:
     }
 
     with torch.no_grad():
-        batch = load_batch('eval_batch.pth')
-        # batch = load_batch('eval_batch_correct_eval.pth')
+        batch = load_batch('data/eval_batch.pth')
+        # batch = load_batch('data/eval_batch_correct_eval.pth')
         print(batch['obj_name'])
         for idx in range(len(batch['obj_name'])):
             palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
@@ -151,14 +150,10 @@ if MAAD:
 
 
 #### VISUALIZATION #####
-def pth_correction(old_pth):
-    new_path = old_pth.replace("/data/hdd1/qf/hithand_data/ffhnet-data/eval/pcd/", "/data/net/userstore/qf/hithand_data/data/ffhnet-data/eval/pcd/")
-    return new_path
-
 if Visualization:
     print(f"len(val_loader): {len(val_loader)}")
     with torch.no_grad():
-        batch = load_batch('eval_batch.pth')
+        batch = load_batch('data/eval_batch.pth')
         for idx in range(len(batch['obj_name'])):
             # if idx < 5:
             #     continue
@@ -174,7 +169,6 @@ if Visualization:
                 out_np = {}
                 for key, value in out.items():
                     out_np[key] = value.cpu().data.numpy()
-            import matplotlib.pyplot as plt
             X = np.linspace(-5.0, 5.0, out['pred_angles'].shape[0])
             fig, ax = plt.subplots()
             ax.set_title("PDF from Template")
@@ -205,16 +199,3 @@ if Visualization:
             # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
             # gt index till 22
             # model.show_gt_grasps(batch['pcd_path'][idx], grasps_gt, idx+300,frame_size=0.015, obj_name=batch['obj_name'][idx])
-
-
-# #### VISUALIZATION for POS + Neg Grasps#####
-# print(len(val_loader))
-# with torch.no_grad():
-#     batch = load_batch('eval_batch.pth')
-#     for idx in range(len(batch['obj_name'])):
-#         if idx < 1:
-#             continue
-#         palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='negative')
-#         grasps_gt_pos = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx],label='positive')
-#         grasps_gt_neg = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx],label='negative')
-#         model.show_gt_grasps_pos_neg(batch['pcd_path'][idx], [grasps_gt_pos, grasps_gt_neg], idx+300)
