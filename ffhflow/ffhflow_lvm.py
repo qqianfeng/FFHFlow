@@ -1,13 +1,11 @@
 import os
 from typing import Any, Dict, Tuple
 
+import normflows as nf
 import numpy as np
 import torch
 import transforms3d
 from yacs.config import CfgNode
-import normflows as nf
-from time import time
-
 
 # from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
@@ -15,8 +13,9 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
 from .heads import GraspFlowGenerator, LatentFlowPrior
-from .utils.losses import gaussian_nll, gaussian_ent
 from .utils import utils
+from .utils.losses import gaussian_ent, gaussian_nll
+
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -262,7 +261,7 @@ class FFHFlowLVM(Metaclass):
         bps_pcd = batch["bps_object"].to(dtype=torch.float64).contiguous()
         bps_pcd = torch.cat([bps_pcd], dim=1)
 
-        # extractt pcd feats: bz * 128
+        # extract pcd feats: bz * 128
         pcd_feats = self.pcd_enc(bps_pcd)
 
         # concat pcd feats and grasps: bz * (128+22)
@@ -404,7 +403,6 @@ class FFHFlowLVM(Metaclass):
         batch['transl'] = grasps['pred_pose_transl']
         batch['joint_conf'] = grasps['joint_conf']
 
-
         # extractt pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
 
@@ -441,7 +439,7 @@ class FFHFlowLVM(Metaclass):
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
 
-        # extractt pcd feats
+        # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
@@ -496,25 +494,18 @@ class FFHFlowLVM(Metaclass):
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
 
-        time1 = time()
         # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
-        time2 = time()
-        print('pcd_enc takes:',time2-time1)
 
         # sample from prior flow
         conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-        time3 = time()
-        print('prior_flow takes:',time3-time2)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-        print('grasp flow takes:',time()-time3)
-        print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
-        pred_angles = pred_angles.view(-1,3)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
+        pred_angles = pred_angles.view(-1, 3)
+        pred_pose_transl = pred_pose_transl.view(-1, 3)
         pred_joint_conf = pred_joint_conf.view(-1, 16)
-        pred_joint_conf = pred_joint_conf[:,:15]
+        pred_joint_conf = pred_joint_conf[:, :15]
 
         output = {}
         output['log_prob'] = log_prob
@@ -529,7 +520,6 @@ class FFHFlowLVM(Metaclass):
             return output, pcd_feats
         else:
             return output
-
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
 
@@ -563,7 +553,7 @@ class FFHFlowLVM(Metaclass):
         return filt_grasps
 
     def save_to_path(self, np_arr, name, base_path):
-        np.save(os.path.join(base_path,name), np_arr)
+        np.save(os.path.join(base_path, name), np_arr)
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -578,8 +568,8 @@ class FFHFlowLVM(Metaclass):
             _type_: _description_
         """
         num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples,3,3))
-        pred_transl_all = np.zeros((num_samples,3))
+        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_transl_all = np.zeros((num_samples, 3))
 
         for idx in range(num_samples):
             pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
@@ -638,10 +628,9 @@ class FFHFlowLVM(Metaclass):
             i = 0
             self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
-            centr_T_palm = np.zeros((4,4))
-            centr_T_palm[:3,:3] = samples['rot_matrix'][i]
-            centr_T_palm[:3,-1] = samples['transl'][i]
+            centr_T_palm = np.zeros((4, 4))
+            centr_T_palm[:3, :3] = samples['rot_matrix'][i]
+            centr_T_palm[:3, -1] = samples['transl'][i]
+
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
-
-
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)

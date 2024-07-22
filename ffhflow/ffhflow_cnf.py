@@ -1,13 +1,11 @@
 import os
 from typing import Any, Dict, Tuple
 
+import normflows as nf
 import numpy as np
 import torch
 import transforms3d
 from yacs.config import CfgNode
-import normflows as nf
-from time import time
-
 
 # from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution
@@ -15,8 +13,9 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
 from .heads import GraspFlowGenerator, LatentFlowPrior
-from .utils.losses import gaussian_nll, gaussian_ent
 from .utils import utils
+from .utils.losses import gaussian_ent, gaussian_nll
+
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -184,8 +183,6 @@ class FFHFlowCNF(Metaclass):
         transl_loss = self.transl_l2_loss(pred_pose_transl, gt_transl, self.L2_loss, self.device)
         joint_conf_loss = self.transl_l2_loss(pred_joint_conf, gt_joint_conf, self.L2_loss, self.device)
 
-        # TODO: add joint as loss
-
         # 2. Compute NLL loss
         conditioning_feats = self.backbone(batch)
 
@@ -196,18 +193,9 @@ class FFHFlowCNF(Metaclass):
         log_prob, _ = self.flow.log_prob(batch, conditioning_feats)
         loss_nll = -log_prob.mean()
 
-        # 3: Compute orthonormal loss on 6D representations
-        # pred_pose_6d = pred_pose_6d.reshape(-1, 2, 3).permute(0, 2, 1)
-        # loss_pose_6d = ((torch.matmul(pred_pose_6d.permute(0, 2, 1), pred_pose_6d) - torch.eye(2, device=pred_pose_6d.device, dtype=pred_pose_6d.dtype).unsqueeze(0)) ** 2)
-        # loss_pose_6d = loss_pose_6d.reshape(batch_size, num_samples, -1).mean()
-
         # combine all the losses
-        # loss = self.cfg.LOSS_WEIGHTS['NLL'] * grasp_nll
-        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
-        #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
-        #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
         loss = self.cfg.LOSS_WEIGHTS['NLL'] * loss_nll
-        # self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
+        #    self.cfg.LOSS_WEIGHTS['ROT'] * rot_loss
         #    self.cfg.LOSS_WEIGHTS['ORTHOGONAL'] * loss_pose_6d +\
         #    self.cfg.LOSS_WEIGHTS['TRANSL'] * transl_loss
 
@@ -216,7 +204,6 @@ class FFHFlowCNF(Metaclass):
                     rot_loss=rot_loss.detach(),
                     joint_conf_loss=joint_conf_loss.detach(),
                     transl_loss=transl_loss.detach())
-                    # loss_pose_6d=loss_pose_6d.detach(),
 
         output['losses'] = losses
 
@@ -425,7 +412,7 @@ class FFHFlowCNF(Metaclass):
             pred_rot_matrix[idx] = mat
 
             # rescale transl prediction back
-
+            # precalculated values from ffhnet dataset
             palm_transl_min = -0.3150945039775345
             palm_transl_max = 0.2628828995958964
             pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
@@ -474,7 +461,7 @@ class FFHFlowCNF(Metaclass):
             centr_T_palm = np.zeros((4,4))
             centr_T_palm[:3,:3] = samples['rot_matrix'][i]
             centr_T_palm[:3,-1] = samples['transl'][i]
-            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
 
+            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
 
