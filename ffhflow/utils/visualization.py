@@ -400,6 +400,69 @@ def show_generated_grasp_distribution(pcd_path,
     else:
         o3d.visualization.draw_geometries(frames)
 
+def show_generated_grasp_distribution_with_prob(pcd_path,
+                                      grasps,
+                                      prob,
+                                      custom_vis=True,
+                                      save_ix=0):
+    """Visualizes the object point cloud together with the generated grasp distribution.
+
+    Args:
+        path (str): Path to the object pcd
+        grasps (dict): contains arrays rot_matrix [n*3*3], palm transl [n*3], joint_conf [n*15]
+    """
+    n_samples = grasps['rot_matrix'].shape[0]
+    frames = []
+    for i in range(n_samples):
+        rot_matrix = grasps['rot_matrix'][i, :, :]
+        transl = grasps['transl'][i, :]
+        palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(
+            transl, rot_matrix)
+        frame_size = prob[i] / 100.0
+        frame = o3d.geometry.TriangleMesh.create_coordinate_frame(frame_size).transform(
+            palm_pose_centr)
+        frames.append(frame)
+
+    # visualize
+    ## If you want to add origin, this
+    # orig = o3d.geometry.TriangleMesh.create_coordinate_frame(0.001)
+    # orig = orig.scale(5, center=orig.get_center())
+    # frames.append(orig)
+
+    obj = o3d.io.read_point_cloud(pcd_path)
+    #obj = obj.voxel_down_sample(0.002)
+    obj.paint_uniform_color([230. / 255., 230. / 255., 10. / 255.])
+    obj.estimate_normals(
+        search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.02, max_nn=100))
+    frames.append(obj)
+    if custom_vis:
+        origin = o3d.geometry.TriangleMesh.create_coordinate_frame(
+                size=0.1)
+        frames.append(origin)
+        vis = o3d.visualization.Visualizer()
+        vis.create_window()
+        for f in frames:
+            vis.add_geometry(f)
+
+        # ctr = vis.get_view_control()
+        # param = o3d.io.read_pinhole_camera_parameters(os.path.join(BASE_PATH,"FFHNet/config/view_point.json"))
+        # ctr.convert_from_pinhole_camera_parameters(param)
+        # vis.get_render_option().load_from_json(os.path.join(BASE_PATH,"FFHNet/config/render_opt.json"))
+        vis.run()
+        # if save_ix != -1:
+        #     key = input("Save image?: ")
+        #     if key == 'y':
+        #         vis.capture_screen_image("/home/yb/Pictures/ffhflow/{}.png".format(save_ix))
+
+        vis.destroy_window()
+        # vis.get_render_option().save_to_json("/home/vm/hand_ws/src/FFHNet/render_opt.json")
+        # param = vis.get_view_control().convert_to_pinhole_camera_parameters()
+        # o3d.io.write_pinhole_camera_parameters("/home/vm/hand_ws/src/FFHNet/view_point.json",
+        #                                        param)
+
+    else:
+        o3d.visualization.draw_geometries(frames)
+
 def show_generated_grasp_distribution_pos_neg(pcd_path,
                                       grasps,
                                       highlight_idx=-1,

@@ -10,7 +10,7 @@ from time import time
 
 
 # from ffhflow.utils.train_utils import clip_grad_norm
-from ffhflow.utils.visualization import show_generated_grasp_distribution
+from ffhflow.utils.visualization import show_generated_grasp_distribution, show_generated_grasp_distribution_with_prob
 
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
@@ -451,7 +451,7 @@ class FFHFlowLVM(Metaclass):
             del pcd_feats_temp
 
         # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
+        conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
 
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
@@ -463,7 +463,7 @@ class FFHFlowLVM(Metaclass):
         pred_joint_conf = pred_joint_conf[:,:15]
 
         output = {}
-        output['log_prob'] = log_prob
+        output['log_prob'] = prior_log_prob
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
@@ -614,7 +614,7 @@ class FFHFlowLVM(Metaclass):
             samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False):
+    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False, prob: bool = False):
         """Visualization of grasps
 
         Args:
@@ -632,7 +632,10 @@ class FFHFlowLVM(Metaclass):
             # samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
         else:
             samples_copy = samples
-        show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
+        if prob is False:
+            show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
+        else:
+            show_generated_grasp_distribution_with_prob(pcd_path, samples_copy, save_ix=i, prob=prob)
 
         if save:
             i = 0

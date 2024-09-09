@@ -22,8 +22,8 @@ def load_batch(path):
     return torch.load(path, map_location="cuda:0")
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='checkpoints/flow_lvm_lr1e-4_best/hparams.yaml', help='Path to config file')
-parser.add_argument('--ckpt_path', type=str, default='checkpoints/flow_lvm_lr1e-4_best/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+parser.add_argument('--model_cfg', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/flow_lvm_lr1e-4_RND1/hparams.yaml', help='Path to config file')
+parser.add_argument('--ckpt_path', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/flow_lvm_lr1e-4_RND1/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
 parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
 args = parser.parse_args()
@@ -164,20 +164,20 @@ if Visualization:
             out = model.sample(batch, idx, num_samples=num_gt_grasps)
             print('visualize',batch['obj_name'][idx] )
 
-            # plot value distribution to show multi-modality
-            if torch.is_tensor(out['rot_matrix']):
-                out_np = {}
-                for key, value in out.items():
-                    out_np[key] = value.cpu().data.numpy()
-            X = np.linspace(-5.0, 5.0, out['pred_angles'].shape[0])
-            fig, ax = plt.subplots()
-            ax.set_title("PDF from Template")
-            # ax.hist(data, density=True, bins=100)
-            ax.hist(out_np['pred_pose_transl'][:,0], label='1')
-            ax.hist(out_np['pred_pose_transl'][:,1], label='2')
-            ax.hist(out_np['pred_pose_transl'][:,2], label='3')
-            ax.legend()
-            fig.show()
+            # # plot value distribution to show multi-modality
+            # if torch.is_tensor(out['rot_matrix']):
+            #     out_np = {}
+            #     for key, value in out.items():
+            #         out_np[key] = value.cpu().data.numpy()
+            # X = np.linspace(-5.0, 5.0, out['pred_angles'].shape[0])
+            # fig, ax = plt.subplots()
+            # ax.set_title("PDF from Template")
+            # # ax.hist(data, density=True, bins=100)
+            # ax.hist(out_np['pred_pose_transl'][:,0], label='1')
+            # ax.hist(out_np['pred_pose_transl'][:,1], label='2')
+            # ax.hist(out_np['pred_pose_transl'][:,2], label='3')
+            # ax.legend()
+            # fig.show()
 
             # rng = np.random.RandomState(10)  # deterministic random data
             # a = np.hstack((rng.normal(size=1000),
@@ -193,7 +193,21 @@ if Visualization:
             # with open('data.pkl', 'wb') as fp:
             #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-            model.show_grasps(batch['pcd_path'][idx], out, idx,frame_size=0.015, obj_name=batch['obj_name'][idx])
+            # original vis
+            # model.show_grasps(batch['pcd_path'][idx], out, idx,frame_size=0.015, obj_name=batch['obj_name'][idx])
+
+            # vis with probablity
+            prob = out['log_prob'].cpu().data.numpy()
+            prob_min = prob.min()
+            prob_max = prob.max()
+            prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
+            original_path = batch['pcd_path'][idx]
+            parts = original_path.split('/')
+            new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
+            new_parts = '/'.join(new_parts)
+
+            model.show_grasps(new_parts, out, idx, prob=prob)
+
             # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
             # model.show_grasps(batch['pcd_path'][idx], filtered_out, idx+100)
             # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
