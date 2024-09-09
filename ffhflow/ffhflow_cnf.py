@@ -310,10 +310,45 @@ class FFHFlowCNF(Metaclass):
 
         return log_prob
 
-    """ TODO: maybe sample should be like this if not working
-    def sample(self, bps, num_samples,return_arr=False):
-        bps_tensor = bps.to('cuda')
-    """
+    # TODO: maybe sample should be like this if not working
+    def sample_in_experiment(self, sample, num_samples):
+        """ generate number of grasp samples
+
+        Args:
+            bps (torch.Tensor): one bps object
+            num_samples (int): _description_
+
+        Returns:
+            tensor: _description_
+        """
+        # move data to cuda
+        # bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda') # old: bps.to('cuda')
+        sample = sample.to(dtype=torch.float64).to('cuda')
+        sample = sample.view(1,-1)
+
+        # batch = {'bps_object': bps_tensor}
+        self.backbone.to('cuda')
+        self.flow.to('cuda')
+
+        conditioning_feats = self.backbone(sample)
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples)
+        log_prob = log_prob.view(-1)
+        pred_angles = pred_angles.view(-1,3)
+        pred_pose_transl = pred_pose_transl.view(-1,3)
+        pred_joint_conf = pred_joint_conf.view(-1, 16)
+        pred_joint_conf = pred_joint_conf[:,:15]
+
+        output = {}
+        output['log_prob'] = log_prob
+        output['pred_angles'] = pred_angles
+        output['pred_pose_transl'] = pred_pose_transl
+        output['pred_joint_conf'] = pred_joint_conf
+
+        # convert position encoding to original format of matrix or vector
+        output = self.convert_output_to_grasp_mat(output, return_arr=False)
+
+        return output
+
     def sample(self, batch, idx, num_samples):
         """ generate number of grasp samples
 
