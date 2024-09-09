@@ -2,16 +2,16 @@ import torch
 import torch.nn as nn
 from typing import Optional, Dict, Tuple
 import normflows as nf
-from .normflows_rot_glow import ConditionalGlow, Glow
+from .glow import ConditionalGlow, Glow
 from yacs.config import CfgNode
 
-from .local_inn import PositionalEncoding
+from .pe import PositionalEncoding
 
-class PriorFlow(nn.Module):
-    def __init__(self, 
+class LatentFlowPrior(nn.Module):
+    def __init__(self,
                  cfg: CfgNode):
         super().__init__()
-        self.prior_flow_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_COND 
+        self.prior_flow_cond = cfg.MODEL.BACKBONE.PRIOR_FLOW_COND
 
         if self.prior_flow_cond:
             cond_glow = ConditionalGlow(input_dim=cfg.MODEL.FLOW.CONTEXT_FEATURES,
@@ -42,14 +42,14 @@ class PriorFlow(nn.Module):
             # log_prob = log_prob.reshape(batch_size, 1)
             # z = z.reshape(batch_size, 1, -1)
             return log_prob, z
-    
+
     def sample(self, cond_feats: torch.Tensor, num_samples: Optional[int] = None,):
         samples, log_prob = self.flow.sample(num_samples, context=cond_feats)
         return samples, log_prob
 
 
 
-class NormflowsGraspFlowPosEncWithTransl(nn.Module):
+class GraspFlowGenerator(nn.Module):
     """
     Normalizing flow implemented according to PROHMR paper. The forward and backward direction are both computed for loss.
     So 'grasp' -> 'z' and also 'z' -> 'grasp'.
@@ -149,7 +149,7 @@ class NormflowsGraspFlowPosEncWithTransl(nn.Module):
         # Generates samples from the distribution together with their log probability.
         samples, log_prob = self.flow.sample(num_samples, context=feats)
         pred_params = samples.reshape(batch_size, num_samples, -1)
-        
+
         if self.positional_encoding:
 
             pred_pose = pred_params[:, :, :60]

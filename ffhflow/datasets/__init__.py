@@ -4,7 +4,7 @@ import torch
 import pytorch_lightning as pl
 from yacs.config import CfgNode
 
-from .ffhgenerator_data_set import FFHGeneratorDataset, FFHGeneratorPCDDataSet, FFHGeneratorPosNegDataset
+from .dataloader import FFHGeneratorDataset
 
 
 class FFHDataModule(pl.LightningDataModule):
@@ -33,10 +33,7 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             Dict: Dictionary containing image and mocap data dataloaders
         """
-        if self.cfg['DATASETS']['POS_AND_NEG_GRASP']:
-            dset_gen = FFHGeneratorPosNegDataset(self.cfg, eval=False)
-        else:
-            dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
+        dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
         train_dataloader = torch.utils.data.DataLoader(dset_gen,
                                                         batch_size=self.cfg.TRAIN.BATCH_SIZE,
                                                         shuffle=True,
@@ -51,10 +48,7 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             torch.utils.data.DataLoader: Validation dataloader
         """
-        if self.cfg['DATASETS']['POS_AND_NEG_GRASP']:
-            dset_gen = FFHGeneratorPosNegDataset(self.cfg, eval=True)
-        else:
-            dset_gen = FFHGeneratorDataset(self.cfg, eval=True)
+        dset_gen = FFHGeneratorDataset(self.cfg, eval=True)
         val_dataloader = torch.utils.data.DataLoader(dset_gen,
                                                         batch_size=self.cfg.TRAIN.BATCH_SIZE,
                                                         shuffle=True,

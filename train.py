@@ -1,21 +1,19 @@
-import os, time
 import argparse
+import os
 import shutil
+import time
+
 import numpy as np
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger
 
-# sets seeds for numpy, torch and python.random.
-import sys
-sys.path.insert(0,os.path.join(os.path.expanduser('~'),'workspace/normalizing-flows'))
-
 from ffhflow.configs import get_config
 from ffhflow.datasets import FFHDataModule
-from ffhflow.normflows_ffhflow_pos_enc_with_transl import NormflowsFFHFlowPosEncWithTransl, NormflowsFFHFlowPosEncWithTransl_LVM
-
+from ffhflow.ffhflow_cnf import FFHFlowCNF
+from ffhflow.ffhflow_lvm import FFHFlowLVM
 
 parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/prohmr.yaml', help='Path to config file')
+parser.add_argument('--model_cfg', type=str, default='ffhflow/configs/ffhflow_cnf.yaml', help='Path to config file')
 parser.add_argument('--root_dir', type=str, default='checkpoints', help='Directory to save logs and checkpoints')
 parser.add_argument('--resume_ckp', type=str, default=None, help='Directory to checkpoints to be resumed')
 
@@ -39,9 +37,10 @@ def crete_logging_file(log_folder):
 cfg = get_config(args.model_cfg)
 print(f"cfg: {cfg}")
 
+# sets seeds for numpy, torch and python.random.
 pl_train_deterministic = False
 random_seed = cfg.get("RND_SEED", -1)
-if random_seed > -1: 
+if random_seed > -1:
     pl.seed_everything(random_seed, workers=True)
     np.random.seed(random_seed)
     pl_train_deterministic = True
@@ -49,15 +48,14 @@ if random_seed > -1:
 # Setup Tensorboard logger
 log_folder = os.path.join(args.root_dir, cfg['NAME'])
 logger = TensorBoardLogger(log_folder, name='', version='', default_hp_metric=False)
-os.makedirs(log_folder, exist_ok=True) 
+os.makedirs(log_folder, exist_ok=True)
 crete_logging_file(log_folder)
+
 # Set up model
-# model = FFHFlow(cfg)
-# model = NormflowsFFHFlowPosEncWithTransl(cfg)
 if "cnf" in args.model_cfg:
-    model = NormflowsFFHFlowPosEncWithTransl(cfg)
+    model = FFHFlowCNF(cfg)
 else:
-    model = NormflowsFFHFlowPosEncWithTransl_LVM(cfg)
+    model = FFHFlowLVM(cfg)
 
 # Setup checkpoint saving
 save_folder = os.path.join(args.root_dir, cfg['NAME'])
