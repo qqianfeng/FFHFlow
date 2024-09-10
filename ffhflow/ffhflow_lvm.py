@@ -421,11 +421,14 @@ class FFHFlowLVM(Metaclass):
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
         if score_type == "log_prob":
+            print('log_prob')
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             posterior_score = latent_prior_ll
         elif score_type == "neg_var":
+            print('neg_var')
             posterior_score = -cond_logvar
         elif score_type == "neg_kl":
+            print('neg_kl')
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
             posterior_score = -pos_prior_kl
@@ -499,7 +502,7 @@ class FFHFlowLVM(Metaclass):
 
         return output
 
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None):
+    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None, posterior_grasp=False):
         """ generate number of grasp samples for experiment, where each inference takes only one bps
 
         Args:
@@ -527,16 +530,18 @@ class FFHFlowLVM(Metaclass):
         pcd_feats = self.pcd_enc(bps_tensor)
 
         # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
+        conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
 
         if posterior_score is not None:
             pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
-            log_prob = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+            log_prob, pos_conditioning_feats = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, return_feats=True, prior_ll=prior_log_prob)
+            if posterior_grasp:
+                beta = 0.7
+                conditioning_feats = beta * pos_conditioning_feats + (1-beta) * conditioning_feats
+                _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
 
-        print('grasp flow takes:',time()-time3)
-        print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1, 3)
         pred_pose_transl = pred_pose_transl.view(-1, 3)
