@@ -425,7 +425,7 @@ class FFHFlowLVM(Metaclass):
             return latent_prior_ll
         elif score_type == "neg_var":
             return -cond_logvar
-        
+
     def sample(self, batch, idx, num_samples, posterior_score=None):
         """ generate number of grasp samples
 
@@ -486,7 +486,7 @@ class FFHFlowLVM(Metaclass):
 
         return output
 
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False):
+    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None):
         """ generate number of grasp samples for experiment, where each inference takes only one bps
 
         Args:
@@ -508,6 +508,7 @@ class FFHFlowLVM(Metaclass):
         self.prior_flow.to('cuda')
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
+        self.posterior_nn.to('cuda')
 
         # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
@@ -516,6 +517,13 @@ class FFHFlowLVM(Metaclass):
         conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
+
+        if posterior_score is not None:
+            pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
+            log_prob = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+
+        print('grasp flow takes:',time()-time3)
+        print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1, 3)
         pred_pose_transl = pred_pose_transl.view(-1, 3)
