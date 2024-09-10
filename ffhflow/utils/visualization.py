@@ -414,12 +414,12 @@ def show_generated_grasp_distribution_with_prob(pcd_path,
     n_samples = grasps['rot_matrix'].shape[0]
     frames = []
     for i in range(n_samples):
-        # i = int(n_samples/2.)
+        # i = 0
         rot_matrix = grasps['rot_matrix'][i, :, :]
         transl = grasps['transl'][i, :]
         palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(
             transl, rot_matrix)
-        frame_size = prob[i] * 5. / 100.0
+        frame_size = prob[i] * 3. / 100.0
         frame = o3d.geometry.TriangleMesh.create_coordinate_frame(frame_size).transform(palm_pose_centr)
         frames.append(frame)
 

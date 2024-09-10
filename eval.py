@@ -161,7 +161,7 @@ if Visualization:
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
             num_gt_grasps = 100 # grasps_gt['transl'].shape[0]
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-            out = model.sample(batch, idx, num_samples=num_gt_grasps, posterior_score="log_prob") # posterior_score: "log_prob" or "neg_var"
+            out = model.sample(batch, idx, num_samples=num_gt_grasps, posterior_score="neg_kl") # posterior_score: "neg_kl", "log_prob" or "neg_var"
             print('visualize',batch['obj_name'][idx] )
             # out = model.sort_and_filter_grasps(out, perc=0.99, return_arr=False)
 
