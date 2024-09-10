@@ -28,7 +28,7 @@ parser.add_argument('--num_samples', type=float, default=100, help='Number of gr
 
 args = parser.parse_args()
 Visualization = True
-MAAD = True
+MAAD = False
 
 # Set up cfg
 cfg = get_config(args.model_cfg)
@@ -98,7 +98,7 @@ if MAAD:
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
             out = model.sample(batch, idx, num_samples=args.num_samples)
 
-            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt,L1=True)
+            transl_loss, rot_loss, joint_loss, coverage = maad_for_grasp_distribution(out, grasps_gt,L1=False)
             if not math.isnan(transl_loss) and not math.isnan(rot_loss) and not math.isnan(joint_loss):
                 transl_loss_sum += transl_loss
                 rot_loss_sum += rot_loss
@@ -159,11 +159,12 @@ if Visualization:
             #     continue
             palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
-            num_gt_grasps = grasps_gt['transl'].shape[0]
+            num_gt_grasps = 100 # grasps_gt['transl'].shape[0]
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-            out = model.sample(batch, idx, num_samples=num_gt_grasps)
+            out = model.sample(batch, idx, num_samples=num_gt_grasps, posterior_score="log_prob") # posterior_score: "log_prob" or "neg_var"
             print('visualize',batch['obj_name'][idx] )
-            out = model.sort_and_filter_grasps(out, perc=0.99, return_arr=False)
+            # out = model.sort_and_filter_grasps(out, perc=0.99, return_arr=False)
+
             # # plot value distribution to show multi-modality
             # if torch.is_tensor(out['rot_matrix']):
             #     out_np = {}

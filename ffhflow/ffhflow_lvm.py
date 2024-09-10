@@ -418,7 +418,17 @@ class FFHFlowLVM(Metaclass):
 
         return log_prob
 
-    def sample(self, batch, idx, num_samples):
+    def posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob"):
+        pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0], dim=0)
+        pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
+        cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
+        if score_type == "log_prob":
+            latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
+            return latent_prior_ll
+        elif score_type == "neg_var":
+            return -cond_logvar
+        
+    def sample(self, batch, idx, num_samples, posterior_score=None):
         """ generate number of grasp samples
 
         Args:
@@ -440,6 +450,7 @@ class FFHFlowLVM(Metaclass):
         self.prior_flow.to('cuda')
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
+        self.posterior_nn.to('cuda')
 
         # extractt pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
@@ -456,14 +467,18 @@ class FFHFlowLVM(Metaclass):
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
 
+        if posterior_score is not None:
+            pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
+            log_prob = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+
         log_prob = log_prob.view(-1)
         pred_angles = pred_angles.view(-1,3)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
+        pred_pose_transl = pred_pose_transl.view(-1, 3)
         pred_joint_conf = pred_joint_conf.view(-1, 16)
         pred_joint_conf = pred_joint_conf[:,:15]
 
         output = {}
-        output['log_prob'] = prior_log_prob
+        output['log_prob'] = log_prob
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
         output['pred_joint_conf'] = pred_joint_conf
@@ -554,7 +569,7 @@ class FFHFlowLVM(Metaclass):
                 index = torch.cat(v.shape[dim] * (index, ), dim)
 
             # Sort grasps
-            filt_grasps[k] = torch.gather(input=v, dim=0, index=index)
+            filt_grasps[k] = torch.gather(input=torch.Tensor(v).cuda(), dim=0, index=index)
 
         # Cast to python (if required)
         if return_arr:
