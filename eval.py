@@ -163,7 +163,7 @@ if Visualization:
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
             # num_gt_grasps = grasps_gt['transl'].shape[0]
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
-            out = model.sample(batch, idx, num_samples=num_samples, posterior_score="log_prob") # posterior_score: "log_prob" or "neg_var"
+            out = model.sample(batch, idx, num_samples=num_samples, posterior_score="neg_kl") # posterior_score: "log_prob" or "neg_var", "neg_kl"
             print('visualize',batch['obj_name'][idx] )
             # out = model.sort_and_filter_grasps(out, perc=0.99, return_arr=False)
 
@@ -191,21 +191,21 @@ if Visualization:
             # plt.show()
 
             # If we need to save the results for FFHEvaluator
-            with open('/data/net/userstore/qf/test/flow_grasps.pkl', 'wb') as fp:
-                pickle.dump(out, fp, protocol=2)
-            with open('/data/net/userstore/qf/test/data.pkl', 'wb') as fp:
-                pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
+            # with open('/data/net/userstore/qf/test/flow_grasps.pkl', 'wb') as fp:
+            #     pickle.dump(out, fp, protocol=2)
+            # with open('/data/net/userstore/qf/test/data.pkl', 'wb') as fp:
+            #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-            a = input('wait for evaluator')
+            # a = input('wait for evaluator')
 
-            with open('/data/net/userstore/qf/test/filtered_grasps.pkl', 'rb') as fp:
-                filtered_grasps = pickle.load(fp)
+            # with open('/data/net/userstore/qf/test/filtered_grasps.pkl', 'rb') as fp:
+            #     filtered_grasps = pickle.load(fp)
 
             # original vis
             # model.show_grasps(batch['pcd_path'][idx], out, idx,frame_size=0.015, obj_name=batch['obj_name'][idx])
 
             # vis with evaluator score
-            prob = filtered_grasps['score']
+            prob = out['log_prob']
             prob_min = prob.min()
             prob_max = prob.max()
             prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
@@ -213,7 +213,7 @@ if Visualization:
             parts = original_path.split('/')
             new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
             new_parts = '/'.join(new_parts)
-            model.show_grasps(new_parts, filtered_grasps, idx, prob=prob)
+            model.show_grasps(new_parts, out, idx, prob=prob)
 
             # # vis with probablity
             # prob = out['log_prob'].cpu().data.numpy()
