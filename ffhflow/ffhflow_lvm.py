@@ -426,6 +426,7 @@ class FFHFlowLVM(Metaclass):
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             posterior_score = latent_prior_ll
         elif score_type == "neg_var":
+<<<<<<< HEAD
             posterior_score = -cond_logvar
         elif score_type == "neg_kl":
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
@@ -439,6 +440,11 @@ class FFHFlowLVM(Metaclass):
             return posterior_score
 
     def sample(self, batch, idx, num_samples, posterior_score=None, posterior_grasp=False):
+=======
+            return -cond_logvar
+
+    def sample(self, batch, idx, num_samples, posterior_score=None):
+>>>>>>> e2e00e601febd3f9c870c48f3f19e8b94c911fd2
         """ generate number of grasp samples
 
         Args:
@@ -502,7 +508,7 @@ class FFHFlowLVM(Metaclass):
 
         return output
 
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False):
+    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None):
         """ generate number of grasp samples for experiment, where each inference takes only one bps
 
         Args:
@@ -524,6 +530,7 @@ class FFHFlowLVM(Metaclass):
         self.prior_flow.to('cuda')
         self.pcd_enc.to('cuda')
         self.flow.to('cuda')
+        self.posterior_nn.to('cuda')
 
         time1 = time()
         # extract pcd feats
@@ -537,6 +544,12 @@ class FFHFlowLVM(Metaclass):
         print('prior_flow takes:',time3-time2)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
+
+        if posterior_score is not None:
+            pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
+            log_prob = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+
+
         print('grasp flow takes:',time()-time3)
         print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
