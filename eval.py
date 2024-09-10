@@ -163,7 +163,7 @@ if Visualization:
             # out = model.sample(batch['bps_object'][idx], num_samples=grasps_gt['rot_matrix'].shape[0])
             out = model.sample(batch, idx, num_samples=num_gt_grasps)
             print('visualize',batch['obj_name'][idx] )
-
+            out = model.sort_and_filter_grasps(out, perc=0.99, return_arr=False)
             # # plot value distribution to show multi-modality
             # if torch.is_tensor(out['rot_matrix']):
             #     out_np = {}
