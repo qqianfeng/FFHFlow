@@ -425,9 +425,11 @@ class FFHFlowLVM(Metaclass):
         if score_type == "log_prob":
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             posterior_score = latent_prior_ll
-        elif score_type == "neg_var":
-            posterior_score = -cond_logvar
+        elif score_type == "ent":
+            gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
+            posterior_score = gaussian_ent
         elif score_type == "neg_kl":
+            prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
             posterior_score = -pos_prior_kl
