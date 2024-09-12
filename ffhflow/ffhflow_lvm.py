@@ -535,6 +535,7 @@ class FFHFlowLVM(Metaclass):
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
 
         if posterior_score is not None:
+            print(posterior_score)
             pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
             log_prob, pos_conditioning_feats = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, return_feats=True, prior_ll=prior_log_prob)
             if posterior_grasp:
