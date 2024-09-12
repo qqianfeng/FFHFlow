@@ -416,7 +416,7 @@ class FFHFlowLVM(Metaclass):
 
         return log_prob
 
-    def posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", return_feats=False, prior_ll=None):
+    def posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
         pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0], dim=0)
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
@@ -424,14 +424,18 @@ class FFHFlowLVM(Metaclass):
             print('log_prob')
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             posterior_score = latent_prior_ll
-        elif score_type == "neg_var":
-            print('neg_var')
-            posterior_score = -cond_logvar
+        elif score_type == "ent":
+            gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
+            posterior_score = gaussian_ent
         elif score_type == "neg_kl":
-            print('neg_kl')
+            print('neg_var')
+            prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
             posterior_score = -pos_prior_kl
+        elif score_type == "cross_prior_pos":
+            gaussian_ll_mean = -0.5 * ((prior_z - cond_mean) ** 2) / torch.exp(cond_logvar)
+            posterior_score = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1)) + gaussian_ll_mean.sum(1)
 
         if return_feats:
             return posterior_score, conditioning_feats
@@ -479,7 +483,7 @@ class FFHFlowLVM(Metaclass):
 
         if posterior_score is not None:
             pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
-            log_prob, pos_conditioning_feats = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, return_feats=True, prior_ll=prior_log_prob)
+            log_prob, pos_conditioning_feats = self.posterior_score(pcd_feats, pred_grasps, prior_z=conditioning_feats, score_type=posterior_score, return_feats=True, prior_ll=prior_log_prob)
             if posterior_grasp:
                 beta = 0.7
                 conditioning_feats = beta * pos_conditioning_feats + (1-beta) * conditioning_feats
