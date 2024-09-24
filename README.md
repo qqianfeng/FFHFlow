@@ -1,4 +1,10 @@
-# FFHFlow
+# FFHFlow: A Flow-based Variational Approach for Multi-fingered Grasp Synthesis in Real Time
+
+## Grasp Distribution Visualization
+![](data/sim_real_point_cloud_grasp_v3.png)
+
+## Model Structure
+![](data/ffhflow_method_v3.png)
 
 ## Installation
 
@@ -29,51 +35,61 @@ Since you might want to modify the code, we recommend installing as follows:
 python setup.py develop
 ```
 
+## Dataset
+Check repo of [FFHNet](https://github.com/qianbot/FFHNet)
+
 ## Folder structure
 ```
-|── environment.yml
-├── eval_batch.pth
-├── eval_ffhflow_2models.py
-├── eval_ffhflow_normflows.py
-├── eval_ffhflow.py
+├── data
+│   ├── eval_batch_correct_eval.pth
+│   ├── eval_batch.pth
+│   ├── obj_names_cnf_sim.npy
+│   ├── obj_names_lvm.npy
+│   ├── tsne_obj_names_lvm_bps_feat_oldeval.npy
+│   ├── tsne_output_cnf_sim.npy
+│   ├── tsne_output_lvm_bps_feat_oldeval.npy
+│   └── tsne_output_lvm.npy
+├── dependencies
+│   └── normflows
 ├── ffhflow
+│   ├── __init__.py
 │   ├── backbones
+│   │   ├── __init__.py
 │   │   ├── ffhgenerator.py
 │   │   ├── pointnet.py
 │   │   └── vae.py
 │   ├── configs
-│   │   ├── local_inn.yaml
-│   │   ├── prohmr.yaml
+│   │   ├── __init__.py
+│   │   ├── ffhflow_cnf.yaml
+│   │   ├── ffhflow_lvm.yaml
 │   ├── datasets
-│   │   ├── ffhgenerator_data_set.py
-│   ├── ffhflow_normal_pos_enc.py
-│   ├── ffhflow_normal.py
-│   ├── ffhflow_pos_enc_neg_grasp.py     # flow with positional encoding and input of positive + negative grasps
-│   ├── ffhflow_pos_enc.py               # flow with positional encoding for only rotation part
-│   ├── ffhflow_pos_enc_with_transl.py   # flow with positional encoding for rotation + translation
-│   ├── ffhflow.py
+│   │   ├── __init__.py
+│   │   ├── dataloader.py
+│   ├── ffhflow_cnf.py
+│   ├── ffhflow_lvm.py
 │   ├── heads
-│   │   ├── local_inn.py
-│   │   ├── normflows_rot_glow_pos_enc_with_transl.py # with normflow pacakge, flow with positional encoding for rotation + translation
-│   │   ├── normflows_rot_glow.py                     # with normflow pacakge, conditional glow class
-│   │   ├── rot_flow_normal_pos_enc.py
-│   │   ├── rot_flow_normal.py
-│   │   ├── rot_flow_pos_enc_neg_grasp.py       # flow with positional encoding and input of positive + negative grasps
-│   │   ├── rot_flow_pos_enc.py                 # flow with positional encoding for only rotation part
-│   │   ├── rot_flow_pos_enc_with_transl.py     # flow with positional encoding for rotation + translation
-│   │   └── rot_flow.py
-│   ├── normflows_ffhflow_pos_enc_with_transl.py    # with normflow pacakge, flow with positional encoding for rotation + translation
+│   │   ├── __init__.py
+│   │   ├── ffhflow_lvm_head.py
+│   │   ├── glow.py
+│   │   ├── pe.py
 │   └── utils
+│       ├── __init__.py
 │       ├── definitions.py
 │       ├── grasp_data_handler.py
+│       ├── losses.py
 │       ├── metrics.py
 │       ├── train_utils.py
 │       ├── utils.py
 │       ├── vis_angle_vector.py
 │       └── visualization.py
 ├── README.md
+├── environment.yml
 ├── requirements.txt
+├── scripts
+│   ├── bps_encode.py
+│   ├── bps_encode.sh
 ├── setup.py
-├── train_ffhflow_normflows.py
-└── train_ffhflow.py
+├── train.py
+├── eval.py
+└── t-sne_visualizer.py
 ```
