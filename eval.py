@@ -189,44 +189,43 @@ if Visualization:
             # plt.title("Histogram with 'auto' bins")
             # Text(0.5, 1.0, "Histogram with 'auto' bins")
             # plt.show()
+            filter_with_eval = False
+            filter_with_prob = True
+            # # If we need to save the results for FFHEvaluator
+            if filter_with_eval:
+                with open('/data/net/userstore/qf/test/flow_grasps.pkl', 'wb') as fp:
+                    pickle.dump(out, fp, protocol=2)
+                with open('/data/net/userstore/qf/test/data.pkl', 'wb') as fp:
+                    pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
 
-            # If we need to save the results for FFHEvaluator
-            # with open('/data/net/userstore/qf/test/flow_grasps.pkl', 'wb') as fp:
-            #     pickle.dump(out, fp, protocol=2)
-            # with open('/data/net/userstore/qf/test/data.pkl', 'wb') as fp:
-            #     pickle.dump([batch['bps_object'][idx], batch['pcd_path'][idx], batch['obj_name'][idx]], fp, protocol=2)
+                a = input('wait for evaluator')
 
-            # a = input('wait for evaluator')
+                with open('/data/net/userstore/qf/test/filtered_grasps.pkl', 'rb') as fp:
+                    filtered_grasps = pickle.load(fp)
 
-            # with open('/data/net/userstore/qf/test/filtered_grasps.pkl', 'rb') as fp:
-            #     filtered_grasps = pickle.load(fp)
+                # vis with evaluator score
+                prob = filtered_grasps['score']
+                prob_min = prob.min()
+                prob_max = prob.max()
+                prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
+                original_path = batch['pcd_path'][idx]
+                parts = original_path.split('/')
+                new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
+                new_parts = '/'.join(new_parts)
+                model.show_grasps(new_parts, filtered_grasps, idx, prob=prob)
 
-            # original vis
-            # model.show_grasps(batch['pcd_path'][idx], out, idx,frame_size=0.015, obj_name=batch['obj_name'][idx])
+            elif filter_with_prob:
+                # vis with probablity
+                prob = out['log_prob'].cpu().data.numpy()
+                prob_min = prob.min()
+                prob_max = prob.max()
+                prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
+                original_path = batch['pcd_path'][idx]
+                parts = original_path.split('/')
+                new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
+                new_parts = '/'.join(new_parts)
 
-            # vis with evaluator score
-            prob = out['log_prob']
-            prob_min = prob.min()
-            prob_max = prob.max()
-            prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
-            original_path = batch['pcd_path'][idx]
-            parts = original_path.split('/')
-            new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
-            new_parts = '/'.join(new_parts)
-            model.show_grasps(new_parts, out, idx, prob=prob)
-
-            # # vis with probablity
-            # prob = out['log_prob'].cpu().data.numpy()
-            # prob_min = prob.min()
-            # prob_max = prob.max()
-            # prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
-            # original_path = batch['pcd_path'][idx]
-            # parts = original_path.split('/')
-            # new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
-            # new_parts = '/'.join(new_parts)
-
-            # model.show_grasps(new_parts, out, idx, prob=prob)
-
+                model.show_grasps(new_parts, out, idx, prob=prob)
             # filtered_out = model.sort_and_filter_grasps(out, perc=0.5)
             # model.show_grasps(batch['pcd_path'][idx], filtered_out, idx+100)
             # filtered_out = model.sort_and_filter_grasps(out, perc=0.1, return_arr=False)
