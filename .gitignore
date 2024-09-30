@@ -6,3 +6,4 @@ checkpoints/
 *.pyc
 *.egg-info
 *.pkl
+*eval_batch.pth
