@@ -1,13 +1,11 @@
 import os
 from typing import Any, Dict, Tuple
 
+import normflows as nf
 import numpy as np
 import torch
 import transforms3d
 from yacs.config import CfgNode
-import normflows as nf
-from time import time
-
 
 # from ffhflow.utils.train_utils import clip_grad_norm
 from ffhflow.utils.visualization import show_generated_grasp_distribution, show_generated_grasp_distribution_with_prob
@@ -15,8 +13,9 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution, show_
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
 from .heads import GraspFlowGenerator, LatentFlowPrior
-from .utils.losses import gaussian_nll, gaussian_ent
 from .utils import utils
+from .utils.losses import gaussian_ent, gaussian_nll
+
 
 def kl_divergence(mu, logvar, device="cpu"):
     """
@@ -262,7 +261,7 @@ class FFHFlowLVM(Metaclass):
         bps_pcd = batch["bps_object"].to(dtype=torch.float64).contiguous()
         bps_pcd = torch.cat([bps_pcd], dim=1)
 
-        # extractt pcd feats: bz * 128
+        # extract pcd feats: bz * 128
         pcd_feats = self.pcd_enc(bps_pcd)
 
         # concat pcd feats and grasps: bz * (128+22)
@@ -404,7 +403,6 @@ class FFHFlowLVM(Metaclass):
         batch['transl'] = grasps['pred_pose_transl']
         batch['joint_conf'] = grasps['joint_conf']
 
-
         # extractt pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
 
@@ -423,12 +421,14 @@ class FFHFlowLVM(Metaclass):
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
         if score_type == "log_prob":
+            print('log_prob')
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             posterior_score = latent_prior_ll
         elif score_type == "ent":
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             posterior_score = gaussian_ent
         elif score_type == "neg_kl":
+            print('neg_var')
             prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
@@ -479,7 +479,7 @@ class FFHFlowLVM(Metaclass):
         self.flow.to('cuda')
         self.posterior_nn.to('cuda')
 
-        # extractt pcd feats
+        # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
         # If ActNorm layers are not initialized, initialize them
         if not self.initialized:
@@ -490,26 +490,6 @@ class FFHFlowLVM(Metaclass):
 
         # sample from prior flow
         conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-
-        # z -> grasp
-        # if grasp_flow_n_samples > 1:
-        #     log_prob_a, pred_angles_a, pred_pose_transl_a, pred_joint_conf_a = torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda')
-        #     for i in range(grasp_flow_n_samples):
-        #         log_prob_t, pred_angles_t, pred_pose_transl_t, pred_joint_conf_t = self.flow(conditioning_feats, num_samples=1)
-        #         log_prob_a = torch.cat([log_prob_a, log_prob_t.unsqueeze(0)], dim=0)
-        #         pred_angles_a = torch.cat([pred_angles_a, pred_angles_t.unsqueeze(0)], dim=0)
-        #         pred_pose_transl_a = torch.cat([pred_pose_transl_a, pred_pose_transl_t.unsqueeze(0)], dim=0)
-        #         pred_joint_conf_a = torch.cat([pred_joint_conf_a, pred_joint_conf_t.unsqueeze(0)], dim=0)
-        #     log_prob = torch.mean(log_prob_a, dim=0)
-        #     pred_angles = torch.mean(pred_angles_a, dim=0)
-        #     pred_pose_transl = torch.mean(pred_pose_transl_a, dim=0)
-        #     pred_joint_conf = torch.mean(pred_joint_conf_a, dim=0)
-        #     log_prob_var = torch.var(log_prob_a, dim=0).cpu().data.numpy()
-        #     pred_angles_var = torch.var(pred_angles_a, dim=0).cpu().data.numpy()
-        #     pred_pose_transl_var = torch.var(pred_pose_transl_a, dim=0).cpu().data.numpy()
-        # else:
-        #     log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-
         
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=grasp_flow_n_samples)
         if grasp_flow_n_samples > 1:
@@ -556,7 +536,7 @@ class FFHFlowLVM(Metaclass):
 
         return output
 
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None):
+    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None, posterior_grasp=False):
         """ generate number of grasp samples for experiment, where each inference takes only one bps
 
         Args:
@@ -580,31 +560,24 @@ class FFHFlowLVM(Metaclass):
         self.flow.to('cuda')
         self.posterior_nn.to('cuda')
 
-        time1 = time()
         # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
-        time2 = time()
-        print('pcd_enc takes:',time2-time1)
 
         # sample from prior flow
-        conditioning_feats, _ = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-        time3 = time()
-        print('prior_flow takes:',time3-time2)
+        conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
         # z -> grasp
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
 
         if posterior_score is not None:
+            print(posterior_score)
             pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
             log_prob = self._posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
 
-
-        print('grasp flow takes:',time()-time3)
-        print('ffhflow in total takes:',time()-time1)
         log_prob = log_prob.view(-1)
-        pred_angles = pred_angles.view(-1,3)
-        pred_pose_transl = pred_pose_transl.view(-1,3)
+        pred_angles = pred_angles.view(-1, 3)
+        pred_pose_transl = pred_pose_transl.view(-1, 3)
         pred_joint_conf = pred_joint_conf.view(-1, 16)
-        pred_joint_conf = pred_joint_conf[:,:15]
+        pred_joint_conf = pred_joint_conf[:, :15]
 
         output = {}
         output['log_prob'] = log_prob
@@ -652,7 +625,7 @@ class FFHFlowLVM(Metaclass):
         return filt_grasps
 
     def save_to_path(self, np_arr, name, base_path):
-        np.save(os.path.join(base_path,name), np_arr)
+        np.save(os.path.join(base_path, name), np_arr)
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -667,8 +640,8 @@ class FFHFlowLVM(Metaclass):
             _type_: _description_
         """
         num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples,3,3))
-        pred_transl_all = np.zeros((num_samples,3))
+        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_transl_all = np.zeros((num_samples, 3))
 
         for idx in range(num_samples):
             pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
@@ -731,10 +704,9 @@ class FFHFlowLVM(Metaclass):
             i = 0
             self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
-            centr_T_palm = np.zeros((4,4))
-            centr_T_palm[:3,:3] = samples['rot_matrix'][i]
-            centr_T_palm[:3,-1] = samples['transl'][i]
+            centr_T_palm = np.zeros((4, 4))
+            centr_T_palm[:3, :3] = samples['rot_matrix'][i]
+            centr_T_palm[:3, -1] = samples['transl'][i]
+
             self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
-
-
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
