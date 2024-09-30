@@ -127,17 +127,6 @@ def plot_transl_dist(pred_pose_transl):
     ax.legend()
     fig.show()
 
-def viz_grasps_with_scores(model, predicted_grasps, idx, batch):
-    prob = predicted_grasps['log_prob']
-    prob_min = prob.min()
-    prob_max = prob.max()
-    prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
-    # original_path = batch['pcd_path'][idx]
-    # parts = original_path.split('/')
-    # new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
-    # new_parts = '/'.join(new_parts)
-    model.show_grasps(batch['pcd_path'][idx], predicted_grasps, idx, prob=prob)
-    
 def get_grasps_from_pcd_path(pcd_path, label, val_dataset):
     grasps = val_dataset.get_grasps_from_pcd_path(pcd_path, label=label)
     pred_angles = []
@@ -191,7 +180,7 @@ def get_grasps_score_hist(val_loader, model, val_dataset, posterior_score):
 
     return scores_per_item
 
-def visualize(batch, mode, num_samples=100, grasp_flow_n_samples=30, posterior_score=None, val_dataset=None):
+def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, posterior_score=None, avg_grasps=False):
     # print(f"len(val_loader): {len(val_loader)}")
     with torch.no_grad():
         num_obj = len(batch['obj_name'])
@@ -200,7 +189,7 @@ def visualize(batch, mode, num_samples=100, grasp_flow_n_samples=30, posterior_s
             if mode == "viz_transl_dist":
                 predicted_grasps = model.sample(batch, 
                                                 obj_idx, 
-                                                num_samples=num_samples,
+                                                num_samples=latent_flow_n_samples,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
                                                 posterior_score=posterior_score)
                 predicted_grasps = model.sort_and_filter_grasps(predicted_grasps, perc=0.99, return_arr=False)
@@ -208,8 +197,8 @@ def visualize(batch, mode, num_samples=100, grasp_flow_n_samples=30, posterior_s
             elif mode == "viz_grasps_wo_scores":
                 predicted_grasps = model.sample(batch, 
                                                 obj_idx, 
-                                                num_samples=num_samples,
-                                                avg_grasps=False,
+                                                num_samples=latent_flow_n_samples,
+                                                avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
                                                 posterior_score=posterior_score)
                 # predicted_grasps = model.sort_and_filter_grasps(predicted_grasps, perc=0.5)
@@ -220,11 +209,20 @@ def visualize(batch, mode, num_samples=100, grasp_flow_n_samples=30, posterior_s
             elif mode == "viz_grasps_with_scores":
                 predicted_grasps = model.sample(batch, 
                                                 obj_idx, 
-                                                num_samples=num_samples,
-                                                avg_grasps=True,
+                                                num_samples=latent_flow_n_samples,
+                                                avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
                                                 posterior_score=posterior_score)
-                viz_grasps_with_scores(model, predicted_grasps, obj_idx, batch)
+                
+                prob = predicted_grasps['log_prob']
+                prob_min = prob.min()
+                prob_max = prob.max()
+                prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
+                # original_path = batch['pcd_path'][idx]
+                # parts = original_path.split('/')
+                # new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
+                # new_parts = '/'.join(new_parts)
+                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, obj_idx, prob=prob)
             elif mode == "viz_neg_pos_hist":
                 posterior_score = "neg_kl"
                 pos_scores, neg_scores = get_scores_per_item(model, posterior_score, batch, obj_idx)
@@ -234,26 +232,26 @@ def visualize(batch, mode, num_samples=100, grasp_flow_n_samples=30, posterior_s
                 plt.legend()
                 plt.show()
             elif mode == "filter_with_eval":
+                predicted_grasps = model.sample(batch, 
+                                                obj_idx, 
+                                                num_samples=latent_flow_n_samples,
+                                                avg_grasps=avg_grasps,
+                                                grasp_flow_n_samples=grasp_flow_n_samples,
+                                                posterior_score=posterior_score)
                 with open('/data/net/userstore/qf/test/flow_grasps.pkl', 'wb') as fp:
                     pickle.dump(predicted_grasps, fp, protocol=2)
                 with open('/data/net/userstore/qf/test/data.pkl', 'wb') as fp:
                     pickle.dump([batch['bps_object'][obj_idx], batch['pcd_path'][obj_idx], batch['obj_name'][obj_idx]], fp, protocol=2)
-
                 a = input('wait for evaluator')
-
                 with open('/data/net/userstore/qf/test/filtered_grasps.pkl', 'rb') as fp:
                     filtered_grasps = pickle.load(fp)
-
                 # vis with evaluator score
                 prob = filtered_grasps['score']
                 prob_min = prob.min()
                 prob_max = prob.max()
                 prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
                 original_path = batch['pcd_path'][obj_idx]
-                parts = original_path.split('/')
-                new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
-                new_parts = '/'.join(new_parts)
-                model.show_grasps(new_parts, filtered_grasps, obj_idx, prob=prob)
+                model.show_grasps(original_path, filtered_grasps, obj_idx, prob=prob)
             elif mode == "filter_with_prob":
                 # vis with probablity
                 prob = predicted_grasps['log_prob'].cpu().data.numpy()
@@ -321,17 +319,24 @@ if __name__ == "__main__":
             plt.show()
 
     if Visualization:
+        save_first_batch = False
         val_fn = 'data/eval_batch.pth'
-        for i, batch in enumerate(val_loader):
-            print(f"Saving val batch: {i}")
-            torch.save(batch, val_fn)
-            break
+        if save_first_batch:
+            for i, batch in enumerate(val_loader):
+                print(f"Saving val batch: {i}")
+                torch.save(batch, val_fn)
+                break
 
         print(f"Reading val batch from file: {val_fn}")
         first_batch = torch.load(val_fn, map_location="cuda:0") 
         # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_pose_transl_var", "pred_log_var", "pred_pose_angle_var"
         # mode: "viz_transl_dist", "viz_grasps_wo_scores", "viz_grasps_with_scores", "viz_neg_pos_hist", "filter_with_eval", "filter_with_prob"
-        visualize(first_batch, mode="viz_grasps_with_scores", num_samples=20, grasp_flow_n_samples=30, posterior_score="pred_pose_transl_var")
+        visualize(first_batch, 
+                  mode="filter_with_eval", 
+                  latent_flow_n_samples=100, 
+                  grasp_flow_n_samples=1, 
+                  posterior_score="neg_kl", 
+                  avg_grasps=True)
     
     if MAAD:
         val_fn = 'data/eval_batch.pth'
