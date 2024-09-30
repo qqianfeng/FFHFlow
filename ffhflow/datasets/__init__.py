@@ -63,3 +63,11 @@ class FFHDataModule(pl.LightningDataModule):
             _type_: _description_
         """
         return FFHGeneratorDataset(self.cfg, eval=True)
+    
+    def train_dataset(self):
+        """Only for eval script to get access to Dataset class in order to obstain ground truth grasps
+
+        Returns:
+            _type_: _description_
+        """
+        return FFHGeneratorDataset(self.cfg, eval=False)

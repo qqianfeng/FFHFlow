@@ -418,7 +418,7 @@ class FFHFlowLVM(Metaclass):
 
         return log_prob
 
-    def posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
+    def _posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
         pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0], dim=0)
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
@@ -442,7 +442,20 @@ class FFHFlowLVM(Metaclass):
         else:
             return posterior_score
 
-    def sample(self, batch, idx, num_samples, posterior_score=None, posterior_grasp=False):
+    def compute_grasp_score(self, grasps, posterior_score, bps_tensor):
+        self.prior_flow.to('cuda')
+        self.pcd_enc.to('cuda')
+        self.posterior_nn.to('cuda')
+
+        # extractt pcd feats
+        padding_zero = torch.zeros([grasps.shape[0], 1]).to('cuda')
+        grasps = torch.cat([grasps, padding_zero], dim=1)
+        pcd_feats = self.pcd_enc(bps_tensor)
+        posterior_score = self._posterior_score(pcd_feats, grasps, score_type=posterior_score)
+
+        return posterior_score.view(-1)
+
+    def sample(self, batch, idx, num_samples, grasp_flow_n_samples=1, posterior_score=None, avg_grasps=True):
         """ generate number of grasp samples
 
         Args:
@@ -479,27 +492,64 @@ class FFHFlowLVM(Metaclass):
         conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
 
         # z -> grasp
-        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
+        # if grasp_flow_n_samples > 1:
+        #     log_prob_a, pred_angles_a, pred_pose_transl_a, pred_joint_conf_a = torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda'), torch.Tensor([]).to('cuda')
+        #     for i in range(grasp_flow_n_samples):
+        #         log_prob_t, pred_angles_t, pred_pose_transl_t, pred_joint_conf_t = self.flow(conditioning_feats, num_samples=1)
+        #         log_prob_a = torch.cat([log_prob_a, log_prob_t.unsqueeze(0)], dim=0)
+        #         pred_angles_a = torch.cat([pred_angles_a, pred_angles_t.unsqueeze(0)], dim=0)
+        #         pred_pose_transl_a = torch.cat([pred_pose_transl_a, pred_pose_transl_t.unsqueeze(0)], dim=0)
+        #         pred_joint_conf_a = torch.cat([pred_joint_conf_a, pred_joint_conf_t.unsqueeze(0)], dim=0)
+        #     log_prob = torch.mean(log_prob_a, dim=0)
+        #     pred_angles = torch.mean(pred_angles_a, dim=0)
+        #     pred_pose_transl = torch.mean(pred_pose_transl_a, dim=0)
+        #     pred_joint_conf = torch.mean(pred_joint_conf_a, dim=0)
+        #     log_prob_var = torch.var(log_prob_a, dim=0).cpu().data.numpy()
+        #     pred_angles_var = torch.var(pred_angles_a, dim=0).cpu().data.numpy()
+        #     pred_pose_transl_var = torch.var(pred_pose_transl_a, dim=0).cpu().data.numpy()
+        # else:
+        #     log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
+
+        
+        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=grasp_flow_n_samples)
+        if grasp_flow_n_samples > 1:
+            log_prob_var = torch.var(log_prob, dim=1).cpu().data.numpy()
+            pred_angles_var = torch.var(pred_angles, dim=1).cpu().data.numpy()
+            pred_pose_transl_var = torch.var(pred_pose_transl, dim=1).cpu().data.numpy()
+            if avg_grasps:
+                log_prob = torch.mean(log_prob, dim=1)
+                pred_angles = torch.mean(pred_angles, dim=1)
+                pred_pose_transl = torch.mean(pred_pose_transl, dim=1)
+                pred_joint_conf = torch.mean(pred_joint_conf, dim=1)
+            else:
+                log_prob = log_prob.reshape(-1, 1)
+                pred_angles = pred_angles.reshape(-1, 3)
+                pred_pose_transl = pred_pose_transl.reshape(-1, 3)
+                pred_joint_conf = pred_joint_conf.reshape(-1, 16)
+        else:
+            log_prob_var, pred_angles_var, pred_pose_transl_var = None, None, None   
 
         if posterior_score is not None:
-            pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
-            log_prob, pos_conditioning_feats = self.posterior_score(pcd_feats, pred_grasps, prior_z=conditioning_feats, score_type=posterior_score, return_feats=True, prior_ll=prior_log_prob)
-            if posterior_grasp:
-                beta = 0.7
-                conditioning_feats = beta * pos_conditioning_feats + (1-beta) * conditioning_feats
-                _, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-
-        log_prob = log_prob.view(-1)
-        pred_angles = pred_angles.view(-1,3)
-        pred_pose_transl = pred_pose_transl.view(-1, 3)
-        pred_joint_conf = pred_joint_conf.view(-1, 16)
-        pred_joint_conf = pred_joint_conf[:,:15]
+            if posterior_score == "pred_pose_transl_var":
+                log_prob = np.max(pred_pose_transl_var, axis=1)
+            elif posterior_score == "pred_angles_var":
+                log_prob = np.max(pred_angles_var, axis=1)
+            elif posterior_score == "log_prob_var":
+                log_prob = np.max(log_prob_var, axis=1)
+            else:
+                pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
+                log_prob, pos_conditioning_feats = self._posterior_score(pcd_feats, 
+                                                                        pred_grasps, 
+                                                                        prior_z=conditioning_feats, 
+                                                                        score_type=posterior_score, 
+                                                                        return_feats=True, 
+                                                                        prior_ll=prior_log_prob)
 
         output = {}
         output['log_prob'] = log_prob
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_pose_transl
-        output['pred_joint_conf'] = pred_joint_conf
+        output['pred_joint_conf'] = pred_joint_conf[:,:15]
 
         # convert position encoding to original format of matrix or vector
         output = self.convert_output_to_grasp_mat(output)
@@ -545,7 +595,7 @@ class FFHFlowLVM(Metaclass):
 
         if posterior_score is not None:
             pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
-            log_prob = self.posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+            log_prob = self._posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
 
 
         print('grasp flow takes:',time()-time3)
@@ -569,7 +619,6 @@ class FFHFlowLVM(Metaclass):
             return output, pcd_feats
         else:
             return output
-
 
     def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
 
@@ -672,6 +721,7 @@ class FFHFlowLVM(Metaclass):
             # samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
         else:
             samples_copy = samples
+
         if prob is False:
             show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
         else:

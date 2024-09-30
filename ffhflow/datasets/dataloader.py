@@ -5,7 +5,6 @@ import pandas as pd
 import sys
 import torch
 from torch.utils import data
-import open3d as o3d
 import transforms3d
 
 sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..'))
