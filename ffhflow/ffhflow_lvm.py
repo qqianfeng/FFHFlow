@@ -3,7 +3,7 @@ from typing import Any, Dict, Tuple
 
 import normflows as nf
 import numpy as np
-import torch
+import torch, roma
 import transforms3d
 from yacs.config import CfgNode
 
@@ -13,48 +13,32 @@ from ffhflow.utils.visualization import show_generated_grasp_distribution, show_
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
 from .heads import GraspFlowGenerator, LatentFlowPrior
-from .utils import utils
-from .utils.losses import gaussian_ent, gaussian_nll
+from .utils.losses import gaussian_ent
+from scipy.spatial.transform import Rotation as R
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 
-def kl_divergence(mu, logvar, device="cpu"):
-    """
-      Computes the kl divergence for batch of mu and logvar.
-    """
-    return torch.mean(-.5 * torch.sum(1. + logvar - mu**2 - torch.exp(logvar), dim=-1))
+# Compute mean of SE(3) transformations
+def quat_mean(quaternions):
+    # assuming the 1st dim is batch size and the 2nd dim is the one to be average over
+    mean_quat_all = torch.zeros(quaternions.shape[0], 4).to(quaternions.device)
+    for i in range(quaternions.shape[0]):
+        mean_quat = torch.sum(torch.einsum("bi,bj->bij", quaternions[i], quaternions[i]), dim=0)
+        L, Q = torch.linalg.eigh(mean_quat)
+        mean_quat_all[i] = Q[:, -1]
+    return mean_quat_all
 
-
-def transl_l2_loss(pred_transl,
-                   gt_transl,
-                   torch_l2_loss_fn,
-                   device='cpu'):
-    return torch_l2_loss_fn(pred_transl, gt_transl)
-
-
-def rot_6D_l2_loss(pred_rot_6D,
-                    gt_rot_matrix,
-                    torch_l2_loss_fn,
-                    device='cpu'):
-    """Takes in the 3D translation and 6D rotation prediction and computes l2 loss to ground truth 3D translation
-    and 3x3 rotation matrix by translforming the 6D rotation to 3x3 rotation matrix.
-
-    Args:
-        pred_transl_rot_6D (_type_): rotation representation of 6 D
-        gt_transl_rot_matrix (_type_): roration matrix [3,3] + translation
-        torch_l2_loss_fn (_type_): _description_
-        device (str, optional): _description_. Defaults to 'cpu'.
-
-    Returns:
-        _type_: _description_
-    """
-    pred_rot_matrix = utils.rot_matrix_from_ortho6d(pred_rot_6D, device=device)  # batch_size*3*3
-    pred_rot_matrix = pred_rot_matrix.view(pred_rot_matrix.shape[0], -1)  # batch_size*9
-    gt_rot_matrix = gt_rot_matrix.view(pred_rot_matrix.shape[0], -1)  #
-    # l2 loss on rotation matrix
-    l2_loss_rot = torch_l2_loss_fn(pred_rot_matrix, gt_rot_matrix)
-
-    return l2_loss_rot
-
+# Compute variance of SE(3) transformations
+def quat_variance(quats, mean_quat):
+    # assuming the 1st dim is batch size and the 2nd dim is the one to be average over
+    var_all = torch.zeros(quats.shape[0]).to(quats.device)
+    for i in range(quats.shape[1]):
+        dis = roma.unitquat_geodesic_distance(quats[i], mean_quat[i])
+        variance = torch.mean(dis**2)
+    
+    var_all[i] = variance
+    return var_all
 
 class FFHFlowLVM(Metaclass):
 
@@ -453,6 +437,12 @@ class FFHFlowLVM(Metaclass):
 
         return posterior_score.view(-1)
 
+    def local_norm(self, prob):
+        prob_min = prob.min()
+        prob_max = prob.max()
+        prob = (prob - prob_min) / (prob_max - prob_min)
+        return prob
+
     def sample(self, batch, idx, num_samples, grasp_flow_n_samples=1, posterior_score=None, avg_grasps=True):
         """ generate number of grasp samples
 
@@ -463,6 +453,10 @@ class FFHFlowLVM(Metaclass):
         Returns:
             tensor: _description_
         """
+        self.num_samples = num_samples
+        self.grasp_flow_n_samples = grasp_flow_n_samples
+        self.posterior_score = posterior_score
+
         if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
             padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
             batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
@@ -490,43 +484,52 @@ class FFHFlowLVM(Metaclass):
         conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
         
         log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=grasp_flow_n_samples)
-        if grasp_flow_n_samples > 1:
-            log_prob_var = torch.var(log_prob, dim=1).cpu().data.numpy()
-            pred_angles_var = torch.var(pred_angles, dim=1).cpu().data.numpy()
-            pred_pose_transl_var = torch.var(pred_pose_transl, dim=1).cpu().data.numpy()
-            if avg_grasps:
-                log_prob = torch.mean(log_prob, dim=1)
-                pred_angles = torch.mean(pred_angles, dim=1)
-                pred_pose_transl = torch.mean(pred_pose_transl, dim=1)
-                pred_joint_conf = torch.mean(pred_joint_conf, dim=1)
-            else:
-                log_prob = log_prob.reshape(-1, 1)
-                pred_angles = pred_angles.reshape(-1, 3)
-                pred_pose_transl = pred_pose_transl.reshape(-1, 3)
-                pred_joint_conf = pred_joint_conf.reshape(-1, 16)
-        else:
-            log_prob_var, pred_angles_var, pred_pose_transl_var = None, None, None   
 
-        if posterior_score is not None:
-            print(f"posterior_score:{posterior_score}")
-            if posterior_score == "pred_pose_transl_var":
-                log_prob = np.max(pred_pose_transl_var, axis=1)
-            elif posterior_score == "pred_angles_var":
-                log_prob = np.max(pred_angles_var, axis=1)
-            elif posterior_score == "pred_log_var":
-                log_prob = log_prob_var
+        if posterior_score != "pred_post_pose_var":
+            if grasp_flow_n_samples > 1:
+                log_prob_var = torch.var(log_prob, dim=1).cpu().data.numpy()
+                pred_pose_transl_var = torch.var(pred_pose_transl, dim=1).cpu().data.numpy()
+                if avg_grasps:
+                    log_prob = torch.mean(log_prob, dim=1)
+                    # pred_angles = torch.mean(pred_angles, dim=1)
+                    pred_quat = roma.euler_to_unitquat('xyz', pred_angles, normalize=True, degrees=True)
+                    pred_quat_mean = quat_mean(pred_quat)
+                    pred_angles_var = quat_variance(pred_quat, pred_quat_mean)
+                    pred_angles = roma.unitquat_to_euler('xyz', pred_quat_mean, degrees=True)
+                    pred_pose_transl = torch.mean(pred_pose_transl, dim=1)
+                    pred_joint_conf = torch.mean(pred_joint_conf, dim=1)
+                else:
+                    log_prob = log_prob.reshape(-1, 1)
+                    pred_angles = pred_angles.reshape(-1, 3)
+                    pred_pose_transl = pred_pose_transl.reshape(-1, 3)
+                    pred_joint_conf = pred_joint_conf.reshape(-1, 16)
+                pred_angles_var = pred_angles_var.cpu().data.numpy()
             else:
-                if grasp_flow_n_samples == 1: 
-                    pred_angles = pred_angles.squeeze(1)
-                    pred_pose_transl = pred_pose_transl.squeeze(1)
-                    pred_joint_conf = pred_joint_conf.squeeze(1)
-                pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf], dim=-1)
-                log_prob, pos_conditioning_feats = self._posterior_score(pcd_feats, 
-                                                                        pred_grasps, 
-                                                                        prior_z=conditioning_feats, 
-                                                                        score_type=posterior_score, 
-                                                                        return_feats=True, 
-                                                                        prior_ll=prior_log_prob)
+                log_prob_var, pred_angles_var, pred_pose_transl_var = None, None, None   
+
+            if posterior_score is not None:
+                print(f"posterior_score:{posterior_score}")
+                if posterior_score == "pred_pose_var":
+                    score = self.local_norm(np.linalg.norm(pred_pose_transl_var, axis=1)) + self.local_norm(pred_angles_var)
+                    log_prob = score
+                elif posterior_score == "pred_pose_transl_var":
+                    log_prob = np.linalg.norm(pred_pose_transl_var, axis=1)
+                elif posterior_score == "pred_pose_angle_var":
+                    log_prob = pred_angles_var
+                elif posterior_score == "pred_log_var":
+                    log_prob = log_prob_var
+                else:
+                    if grasp_flow_n_samples == 1: 
+                        pred_angles = pred_angles.squeeze(1)
+                        pred_pose_transl = pred_pose_transl.squeeze(1)
+                        pred_joint_conf = pred_joint_conf.squeeze(1)
+                    pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf], dim=-1)
+                    log_prob, pos_conditioning_feats = self._posterior_score(pcd_feats, 
+                                                                            pred_grasps, 
+                                                                            prior_z=conditioning_feats, 
+                                                                            score_type=posterior_score, 
+                                                                            return_feats=True, 
+                                                                            prior_ll=prior_log_prob)
 
         output = {}
         output['log_prob'] = log_prob
@@ -535,7 +538,10 @@ class FFHFlowLVM(Metaclass):
         output['pred_joint_conf'] = pred_joint_conf[:,:15]
 
         # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output)
+        if posterior_score == "pred_post_pose_var":
+            output = self.convert_output_to_grasp_mat_var(output)
+        else:
+            output = self.convert_output_to_grasp_mat(output)
 
         return output
 
@@ -629,6 +635,41 @@ class FFHFlowLVM(Metaclass):
 
     def save_to_path(self, np_arr, name, base_path):
         np.save(os.path.join(base_path, name), np_arr)
+    
+    def convert_output_to_grasp_mat_var(self, samples):
+        num_samples = samples['pred_angles'].shape[0]
+        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_transl_all = np.zeros((num_samples, 3))
+        log_prob = np.zeros((num_samples))
+
+        for idx in range(num_samples):
+            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            # rescale rotation prediction back
+            pred_angles = pred_angles * 2 * np.pi - np.pi
+            pred_angles[pred_angles < -np.pi] += 2 * np.pi
+            alpha, beta, gamma = np.mean(pred_angles, axis=0)
+            log_prob[idx] = np.linalg.norm(np.var(pred_angles, axis=0))
+            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
+            pred_rot_matrix[idx] = mat
+
+            # rescale transl prediction back
+            palm_transl_min = -0.3150945039775345
+            palm_transl_max = 0.2628828995958964
+            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
+            value_range = palm_transl_max - palm_transl_min
+            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
+            pred_transl[pred_transl < -value_range / 2] += value_range
+            pred_transl[pred_transl > value_range / 2] -= value_range
+            log_prob[idx] += np.linalg.norm(np.var(pred_transl, axis=0)) 
+            pred_transl_all[idx] = np.mean(pred_transl, axis=0)
+
+        joint_conf = samples['pred_joint_conf'].cpu().data.numpy()
+        samples = {}
+        samples['rot_matrix'] = pred_rot_matrix
+        samples['transl'] = pred_transl_all
+        samples['joint_conf'] = joint_conf
+        samples['log_prob'] = log_prob
+        return samples
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -651,19 +692,16 @@ class FFHFlowLVM(Metaclass):
             # rescale rotation prediction back
             pred_angles = pred_angles * 2 * np.pi - np.pi
             pred_angles[pred_angles < -np.pi] += 2 * np.pi
-
             alpha, beta, gamma = pred_angles
             mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
             pred_rot_matrix[idx] = mat
 
             # rescale transl prediction back
-
             palm_transl_min = -0.3150945039775345
             palm_transl_max = 0.2628828995958964
             pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
             value_range = palm_transl_max - palm_transl_min
             pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
-
             pred_transl[pred_transl < -value_range / 2] += value_range
             pred_transl[pred_transl > value_range / 2] -= value_range
             pred_transl_all[idx] = pred_transl

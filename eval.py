@@ -206,7 +206,7 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 # show gt grasps
                 # grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][obj_idx])
                 # model.show_gt_grasps(batch['pcd_path'][obj_idx], grasps_gt, obj_idx+300,frame_size=0.015, obj_name=batch['obj_name'][obj_idx])
-            elif mode == "viz_grasps_with_scores":
+            elif mode == "viz_grasps_w_scores":
                 predicted_grasps = model.sample(batch, 
                                                 obj_idx, 
                                                 num_samples=latent_flow_n_samples,
@@ -271,8 +271,10 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-    parser.add_argument('--model_cfg', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/hparams.yaml', help='Path to config file')
-    parser.add_argument('--ckpt_path', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+    parser.add_argument('--model_cfg', type=str, default='/home/jianxiang.feng/Projects/ffhflow_stash/FFHFlow_lx0217/checkpoints/flow_lvm_lr1e-4_RND-1_lx0260_localENV/hparams.yaml', help='Path to config file')
+    parser.add_argument('--ckpt_path', type=str, default='/home/jianxiang.feng/Projects/ffhflow_stash/FFHFlow_lx0217/checkpoints/flow_lvm_lr1e-4_RND-1_lx0260_localENV/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+    # parser.add_argument('--model_cfg', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/hparams.yaml', help='Path to config file')
+    # parser.add_argument('--ckpt_path', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
     parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
     args = parser.parse_args()
@@ -329,13 +331,13 @@ if __name__ == "__main__":
 
         print(f"Reading val batch from file: {val_fn}")
         first_batch = torch.load(val_fn, map_location="cuda:0") 
-        # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_pose_transl_var", "pred_log_var", "pred_pose_angle_var"
-        # mode: "viz_transl_dist", "viz_grasps_wo_scores", "viz_grasps_with_scores", "viz_neg_pos_hist", "filter_with_eval", "filter_with_prob"
+        # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_pose_transl_var", "pred_log_var", "pred_pose_angle_var"，"pred_post_pose_var", "pred_pose_var"
+        # mode: "viz_transl_dist", "viz_grasps_wo_scores", "viz_grasps_w_scores", "viz_neg_pos_hist", "filter_with_eval", "filter_with_prob"
         visualize(first_batch, 
-                  mode="filter_with_eval", 
+                  mode="viz_grasps_w_scores", 
                   latent_flow_n_samples=100, 
-                  grasp_flow_n_samples=1, 
-                  posterior_score="neg_kl", 
+                  grasp_flow_n_samples=50, 
+                  posterior_score="pred_post_pose_var", 
                   avg_grasps=True)
     
     if MAAD:
