@@ -8,7 +8,7 @@ import transforms3d
 from yacs.config import CfgNode
 
 # from ffhflow.utils.train_utils import clip_grad_norm
-from ffhflow.utils.visualization import show_generated_grasp_distribution, show_generated_grasp_distribution_with_prob
+from ffhflow.utils.visualization import show_generated_grasp_distribution, viz_grasp_w_hand_o3d, viz_grasp_w_hand_pyrender
 
 from . import Metaclass
 from .backbones import BPSMLP, ResNet_3layer
@@ -400,29 +400,29 @@ class FFHFlowLVM(Metaclass):
 
         return log_prob
 
-    def _posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
+    def _compute_posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
         pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0], dim=0)
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
         if score_type == "log_prob":
             latent_prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
-            posterior_score = latent_prior_ll
+            score = latent_prior_ll
         elif score_type == "ent":
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
-            posterior_score = gaussian_ent
+            score = gaussian_ent
         elif score_type == "neg_kl":
             prior_ll, _ = self.prior_flow.log_prob(conditioning_feats, cond_feats=pcd_feats)
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
-            posterior_score = -pos_prior_kl
+            score = -pos_prior_kl
         elif score_type == "cross_prior_pos":
             gaussian_ll_mean = -0.5 * ((prior_z - cond_mean) ** 2) / torch.exp(cond_logvar)
-            posterior_score = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1)) + gaussian_ll_mean.sum(1)
+            score = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1)) + gaussian_ll_mean.sum(1)
 
         if return_feats:
-            return posterior_score, conditioning_feats
+            return score, conditioning_feats
         else:
-            return posterior_score
+            return score
 
     def compute_grasp_score(self, grasps, posterior_score, bps_tensor):
         self.prior_flow.to('cuda')
@@ -443,7 +443,7 @@ class FFHFlowLVM(Metaclass):
         prob = (prob - prob_min) / (prob_max - prob_min)
         return prob
 
-    def sample(self, batch, idx, num_samples, grasp_flow_n_samples=1, posterior_score=None, avg_grasps=True):
+    def sample(self, batch, idx, num_samples, grasp_flow_n_samples=1, posterior_score=None, avg_grasps=False):
         """ generate number of grasp samples
 
         Args:
@@ -480,196 +480,52 @@ class FFHFlowLVM(Metaclass):
             self.initialize(batch, pcd_feats_temp)
             del pcd_feats_temp
 
-        # sample from prior flow
+        # sample from prior flow  L * D and L * 1
         conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
         
-        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=grasp_flow_n_samples)
-
-        if posterior_score != "pred_post_pose_var":
-            if grasp_flow_n_samples > 1:
-                log_prob_var = torch.var(log_prob, dim=1).cpu().data.numpy()
-                pred_pose_transl_var = torch.var(pred_pose_transl, dim=1).cpu().data.numpy()
-                if avg_grasps:
-                    log_prob = torch.mean(log_prob, dim=1)
-                    # pred_angles = torch.mean(pred_angles, dim=1)
-                    pred_quat = roma.euler_to_unitquat('xyz', pred_angles, normalize=True, degrees=True)
-                    pred_quat_mean = quat_mean(pred_quat)
-                    pred_angles_var = quat_variance(pred_quat, pred_quat_mean)
-                    pred_angles = roma.unitquat_to_euler('xyz', pred_quat_mean, degrees=True)
-                    pred_pose_transl = torch.mean(pred_pose_transl, dim=1)
-                    pred_joint_conf = torch.mean(pred_joint_conf, dim=1)
-                else:
-                    log_prob = log_prob.reshape(-1, 1)
-                    pred_angles = pred_angles.reshape(-1, 3)
-                    pred_pose_transl = pred_pose_transl.reshape(-1, 3)
-                    pred_joint_conf = pred_joint_conf.reshape(-1, 16)
-                pred_angles_var = pred_angles_var.cpu().data.numpy()
-            else:
-                log_prob_var, pred_angles_var, pred_pose_transl_var = None, None, None   
-
-            if posterior_score is not None:
-                print(f"posterior_score:{posterior_score}")
-                if posterior_score == "pred_pose_var":
-                    score = self.local_norm(np.linalg.norm(pred_pose_transl_var, axis=1)) + self.local_norm(pred_angles_var)
-                    log_prob = score
-                elif posterior_score == "pred_pose_transl_var":
-                    log_prob = np.linalg.norm(pred_pose_transl_var, axis=1)
-                elif posterior_score == "pred_pose_angle_var":
-                    log_prob = pred_angles_var
-                elif posterior_score == "pred_log_var":
-                    log_prob = log_prob_var
-                else:
-                    if grasp_flow_n_samples == 1: 
-                        pred_angles = pred_angles.squeeze(1)
-                        pred_pose_transl = pred_pose_transl.squeeze(1)
-                        pred_joint_conf = pred_joint_conf.squeeze(1)
-                    pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf], dim=-1)
-                    log_prob, pos_conditioning_feats = self._posterior_score(pcd_feats, 
-                                                                            pred_grasps, 
-                                                                            prior_z=conditioning_feats, 
-                                                                            score_type=posterior_score, 
-                                                                            return_feats=True, 
-                                                                            prior_ll=prior_log_prob)
+        # sample from grasp flow  # L * G * (1+3+3+15)
+        log_prob, pred_angles, pred_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=grasp_flow_n_samples)
+        
+        if grasp_flow_n_samples > 1:
+            if avg_grasps:
+                # weighted average of grasp samples
+                log_prob_weights = torch.nn.functional.normalize(log_prob, dim=1, p=1) # L * G
+                pred_angles = (pred_angles*log_prob_weights[:,:,None]).sum(1) # L * 3
+                pred_transl = (pred_transl*log_prob_weights[:,:,None]).sum(1) # L * 3
+                pred_joint_conf = (pred_joint_conf*log_prob_weights[:,:,None]).sum(1) # L * 15
+                log_prob = torch.mean(log_prob, dim=1)
+        elif grasp_flow_n_samples == 1:
+            pred_angles = pred_angles.squeeze(1)
+            pred_transl = pred_transl.squeeze(1)
+            pred_joint_conf = pred_joint_conf.squeeze(1)
+            log_prob = log_prob.squeeze(1)
+            
+        if posterior_score is not None:
+            pred_grasps = torch.cat([pred_angles, pred_transl, pred_joint_conf], dim=-1)
+            log_prob = self._compute_posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
 
         output = {}
-        output['log_prob'] = log_prob
+        output['log_prob'] = log_prob # + prior_log_prob[:, None]
         output['pred_angles'] = pred_angles
-        output['pred_pose_transl'] = pred_pose_transl
+        output['pred_pose_transl'] = pred_transl
         output['pred_joint_conf'] = pred_joint_conf[:,:15]
 
-        # convert position encoding to original format of matrix or vector
-        if posterior_score == "pred_post_pose_var":
-            output = self.convert_output_to_grasp_mat_var(output)
-        else:
-            output = self.convert_output_to_grasp_mat(output)
-
+        # convert euler angels to rotation matrix and rescale transl
+        self.flatten_outputs(output)
+        output = self.convert_output_to_grasp_mat(output)
         return output
 
-    def sample_in_experiment(self, bps, num_samples, return_cond_feat=False, posterior_score=None, posterior_grasp=False):
-        """ generate number of grasp samples for experiment, where each inference takes only one bps
-
-        Args:
-            bps (torch.Tensor): one bps object
-            num_samples (int): _description_
-
-        Returns:
-            tensor: _description_
-        """
-        # if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
-        #     padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
-        #     batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
-
-        # move data to cuda
-        bps_tensor = bps.to(dtype=torch.float64).to('cuda')
-        bps_tensor = bps_tensor.view(1,-1)
-
-        # move model to cuda
-        self.prior_flow.to('cuda')
-        self.pcd_enc.to('cuda')
-        self.flow.to('cuda')
-        self.posterior_nn.to('cuda')
-
-        # extract pcd feats
-        pcd_feats = self.pcd_enc(bps_tensor)
-
-        # sample from prior flow
-        conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
-        # z -> grasp
-        log_prob, pred_angles, pred_pose_transl, pred_joint_conf = self.flow(conditioning_feats, num_samples=1)
-
-        if posterior_score is not None:
-            print(posterior_score)
-            pred_grasps = torch.cat([pred_angles, pred_pose_transl, pred_joint_conf.squeeze(1)], dim=1)
-            log_prob = self._posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
-
-        log_prob = log_prob.view(-1)
-        pred_angles = pred_angles.view(-1, 3)
-        pred_pose_transl = pred_pose_transl.view(-1, 3)
-        pred_joint_conf = pred_joint_conf.view(-1, 16)
-        pred_joint_conf = pred_joint_conf[:, :15]
-
-        output = {}
-        output['log_prob'] = log_prob
-        output['pred_angles'] = pred_angles
-        output['pred_pose_transl'] = pred_pose_transl
-        output['pred_joint_conf'] = pred_joint_conf
-
-        # convert position encoding to original format of matrix or vector
-        output = self.convert_output_to_grasp_mat(output, return_arr=False)
-
-        if return_cond_feat:
-            return output, pcd_feats
+    def flatten_outputs(self, outputs, unflatten=False):
+        if not unflatten:
+            outputs['log_prob'] = outputs['log_prob'].reshape(-1)
+            outputs['pred_angles'] = outputs['pred_angles'].reshape(-1, 3)
+            outputs['pred_pose_transl'] = outputs['pred_pose_transl'].reshape(-1, 3)
+            outputs['pred_joint_conf'] = outputs['pred_joint_conf'].reshape(-1, 15)
         else:
-            return output
-
-    def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
-
-        num_samples = samples['log_prob'].shape[0]
-        filt_num = num_samples * perc
-        sorted_score, indices = samples['log_prob'].sort(descending=True)
-        thresh = sorted_score[int(filt_num)-1]
-        indices = indices[sorted_score > thresh]
-        sorted_score = sorted_score[sorted_score > thresh]
-
-        filt_grasps = {}
-
-        for k, v in samples.items():
-            # so far no output as pred_joint_conf
-            index = indices.clone()
-            dim = 0
-
-            # Dynamically adjust dimensions for sorting
-            while len(v.shape) > len(index.shape):
-                dim += 1
-                index = index[..., None]
-                index = torch.cat(v.shape[dim] * (index, ), dim)
-
-            # Sort grasps
-            filt_grasps[k] = torch.gather(input=torch.Tensor(v).cuda(), dim=0, index=index)
-
-        # Cast to python (if required)
-        if return_arr:
-            filt_grasps = {k: v.cpu().detach().numpy() for k, v in filt_grasps.items()}
-
-        return filt_grasps
-
-    def save_to_path(self, np_arr, name, base_path):
-        np.save(os.path.join(base_path, name), np_arr)
-    
-    def convert_output_to_grasp_mat_var(self, samples):
-        num_samples = samples['pred_angles'].shape[0]
-        pred_rot_matrix = np.zeros((num_samples, 3, 3))
-        pred_transl_all = np.zeros((num_samples, 3))
-        log_prob = np.zeros((num_samples))
-
-        for idx in range(num_samples):
-            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
-            # rescale rotation prediction back
-            pred_angles = pred_angles * 2 * np.pi - np.pi
-            pred_angles[pred_angles < -np.pi] += 2 * np.pi
-            alpha, beta, gamma = np.mean(pred_angles, axis=0)
-            log_prob[idx] = np.linalg.norm(np.var(pred_angles, axis=0))
-            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
-            pred_rot_matrix[idx] = mat
-
-            # rescale transl prediction back
-            palm_transl_min = -0.3150945039775345
-            palm_transl_max = 0.2628828995958964
-            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
-            value_range = palm_transl_max - palm_transl_min
-            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
-            pred_transl[pred_transl < -value_range / 2] += value_range
-            pred_transl[pred_transl > value_range / 2] -= value_range
-            log_prob[idx] += np.linalg.norm(np.var(pred_transl, axis=0)) 
-            pred_transl_all[idx] = np.mean(pred_transl, axis=0)
-
-        joint_conf = samples['pred_joint_conf'].cpu().data.numpy()
-        samples = {}
-        samples['rot_matrix'] = pred_rot_matrix
-        samples['transl'] = pred_transl_all
-        samples['joint_conf'] = joint_conf
-        samples['log_prob'] = log_prob
-        return samples
+            outputs['log_prob'] = outputs['log_prob'].reshape(self.num_samples, self.grasp_flow_n_samples, -1)
+            outputs['rot_matrix'] = outputs['rot_matrix'].reshape(self.num_samples, self.grasp_flow_n_samples, 3, 3)
+            outputs['transl'] = outputs['transl'].reshape(self.num_samples, self.grasp_flow_n_samples, 3)
+            outputs['joint_conf'] = outputs['joint_conf'].reshape(self.num_samples, self.grasp_flow_n_samples, 15)
 
     def convert_output_to_grasp_mat(self, samples, return_arr=True):
         """_summary_
@@ -710,6 +566,7 @@ class FFHFlowLVM(Metaclass):
             samples['rot_matrix'] = pred_rot_matrix
             samples['transl'] = pred_transl_all
             samples['joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
+            samples['log_prob'] = samples['log_prob'].cpu().data.numpy()
 
         else:
             samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()
@@ -717,37 +574,104 @@ class FFHFlowLVM(Metaclass):
             samples['joint_conf'] = samples['pred_joint_conf']
         return samples
 
-    def show_grasps(self, pcd_path, samples: Dict, i: int = 0, base_path: str = '', save: bool = False, prob: bool = False):
-        """Visualization of grasps
+    def convert_output_to_grasp_mat_var(self, samples):
 
-        Args:
-            pcd_path (str): _description_
-            samples (Dict): with of tensor
-            i (int): index of sample. If i = -1, no images will be triggered to ask for save
-        """
+        num_samples = samples['pred_angles'].shape[0]
+        pred_rot_matrix = np.zeros((num_samples, 3, 3))
+        pred_transl_all = np.zeros((num_samples, 3))
+        log_prob = np.zeros((num_samples))
+
+        for idx in range(num_samples):
+            pred_angles = samples['pred_angles'][idx].cpu().data.numpy()
+            # rescale rotation prediction back
+            pred_angles = pred_angles * 2 * np.pi - np.pi
+            pred_angles[pred_angles < -np.pi] += 2 * np.pi
+            alpha, beta, gamma = np.mean(pred_angles, axis=0)
+            log_prob[idx] = np.linalg.norm(np.var(pred_angles, axis=0))
+            mat = transforms3d.euler.euler2mat(alpha, beta, gamma)
+            pred_rot_matrix[idx] = mat
+
+            # rescale transl prediction back
+            palm_transl_min = -0.3150945039775345
+            palm_transl_max = 0.2628828995958964
+            pred_transl = samples['pred_pose_transl'][idx].cpu().data.numpy()
+            value_range = palm_transl_max - palm_transl_min
+            pred_transl = pred_transl * (palm_transl_max - palm_transl_min) + palm_transl_min
+            pred_transl[pred_transl < -value_range / 2] += value_range
+            pred_transl[pred_transl > value_range / 2] -= value_range
+            log_prob[idx] += np.linalg.norm(np.var(pred_transl, axis=0)) 
+            pred_transl_all[idx] = np.mean(pred_transl, axis=0)
+
+        joint_conf = samples['pred_joint_conf'].cpu().data.numpy()
+        samples = {}
+        samples['rot_matrix'] = pred_rot_matrix
+        samples['transl'] = pred_transl_all
+        samples['joint_conf'] = joint_conf
+        samples['log_prob'] = log_prob
+        return samples
+
+    def show_grasps(self, 
+                    pcd_path, 
+                    samples: Dict, 
+                    w_hands: bool = False,
+                    base_path: str = '', 
+                    save: bool = False, 
+                    prob=None):
 
         if torch.is_tensor(samples['rot_matrix']):
             samples_copy = {}
             for key, value in samples.items():
                 samples_copy[key] = value.cpu().data.numpy()
-            # samples_copy['rot_matrix'] = samples['rot_matrix'].cpu().data.numpy()
-            # samples_copy['transl'] = samples['transl'].cpu().data.numpy()
-            # samples_copy['pred_joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
         else:
             samples_copy = samples
 
-        if prob is False:
-            show_generated_grasp_distribution(pcd_path, samples_copy, save_ix=i)
+        if w_hands:
+            viz_grasp_w_hand_o3d(pcd_path, samples_copy, step=1)
+            # viz_grasp_w_hand_pyrender(pcd_path, samples_copy, step=20)
         else:
-            show_generated_grasp_distribution_with_prob(pcd_path, samples_copy, save_ix=i, prob=prob)
+            show_generated_grasp_distribution(pcd_path, samples_copy, prob=prob)
 
-        if save:
-            i = 0
-            self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
+        # if save:
+        #     self.save_to_path(pcd_path, 'pcd_path.npy', base_path)
 
-            centr_T_palm = np.zeros((4, 4))
-            centr_T_palm[:3, :3] = samples['rot_matrix'][i]
-            centr_T_palm[:3, -1] = samples['transl'][i]
+        #     centr_T_palm = np.zeros((4, 4))
+        #     centr_T_palm[:3, :3] = samples['rot_matrix'][i]
+        #     centr_T_palm[:3, -1] = samples['transl'][i]
 
-            self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
+        #     self.save_to_path(centr_T_palm, 'centr_T_palm.npy', base_path)
             # self.save_to_path(grasps['joint_conf'][i], 'joint_conf.npy', base_path)
+
+    def sort_and_filter_grasps(self, samples: Dict, perc: float = 0.5, return_arr: bool = False):
+
+        num_samples = samples['log_prob'].shape[0]
+        filt_num = num_samples * perc
+        sorted_score, indices = samples['log_prob'].sort(descending=True)
+        thresh = sorted_score[int(filt_num)-1]
+        indices = indices[sorted_score > thresh]
+        sorted_score = sorted_score[sorted_score > thresh]
+
+        filt_grasps = {}
+
+        for k, v in samples.items():
+            # so far no output as pred_joint_conf
+            index = indices.clone()
+            dim = 0
+
+            # Dynamically adjust dimensions for sorting
+            while len(v.shape) > len(index.shape):
+                dim += 1
+                index = index[..., None]
+                index = torch.cat(v.shape[dim] * (index, ), dim)
+
+            # Sort grasps
+            filt_grasps[k] = torch.gather(input=torch.Tensor(v).cuda(), dim=0, index=index)
+
+        # Cast to python (if required)
+        if return_arr:
+            filt_grasps = {k: v.cpu().detach().numpy() for k, v in filt_grasps.items()}
+
+        return filt_grasps
+
+    def save_to_path(self, np_arr, name, base_path):
+        np.save(os.path.join(base_path, name), np_arr)
+    

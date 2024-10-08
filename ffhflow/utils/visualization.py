@@ -1,35 +1,43 @@
 from __future__ import division
 
-import collections
 import colorsys
 import copy
 import os
 import sys
 
-import matplotlib
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+from matplotlib import cm
 import numpy as np
 
 sys.path.insert(0,os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','..'))
 from ffhflow.utils.grasp_data_handler import GraspDataHandlerVae
 from ffhflow.utils import utils
+from ffhflow.utils.robot_visualization import create_robot_mesh_from_joints_pyrender, create_robot_mesh_from_joints
 
-try:
-    from urdfpy import URDF
-except:
-    print("[WARNING] urdfpy (ROS) not installed.")
 import open3d as o3d
 import pandas as pd
 # TODO fix, upgrade python to 3.8
-# import pyrender
+import pyrender
 from sklearn.metrics import confusion_matrix
-from sklearn.utils.multiclass import unique_labels
+# from sklearn.utils.multiclass import unique_labels
 import trimesh
 
 path = os.path.dirname(os.path.abspath(__file__))
 BASE_PATH = os.path.split(os.path.split(path)[0])[0]
 
+class MplColorHelper:
+    # refer to https://stackoverflow.com/questions/26108436/how-can-i-get-the-matplotlib-rgb-color-given-the-colormap-name-boundrynorm-an
+
+  def __init__(self, cmap_name, start_val, stop_val):
+    self.cmap_name = cmap_name
+    self.cmap = plt.get_cmap(cmap_name)
+    self.norm = mpl.colors.Normalize(vmin=start_val, vmax=stop_val)
+    self.scalarMap = cm.ScalarMappable(norm=self.norm, cmap=self.cmap)
+
+  def get_rgb(self, val):
+    return self.scalarMap.to_rgba(val)
 
 def find_max_min_success(p_success_list, idx):
     """Find the max and min success in a list of success obtained from refinement. Each item in success list
@@ -280,6 +288,7 @@ def show_dataloader_grasp(bps_path, obj, centr_T_mesh, palm_pose_mesh, palm_pose
         [rendered_pcd, mesh_pc, mesh_frame, centr_frame, palm_frame])
     # o3d.visualization.draw_geometries([rendered_pcd, mesh_pc, centr_frame, palm_frame])
 
+
 def show_dataloader_grasp_with_pcd_in_world_frame(obj,
                                                   world_T_mesh_obj,
                                                   world_T_palm_pose,
@@ -333,10 +342,9 @@ def show_dataloader_grasp_with_pcd_in_world_frame(obj,
     # o3d.visualization.draw_geometries([rendered_pcd, mesh_pc, centr_frame, palm_frame])
 
 
-
 def show_generated_grasp_distribution(pcd_path,
                                       grasps,
-                                      highlight_idx=-1,
+                                      prob=None,
                                       custom_vis=True,
                                       save_ix=0):
     """Visualizes the object point cloud together with the generated grasp distribution.
@@ -352,11 +360,12 @@ def show_generated_grasp_distribution(pcd_path,
         transl = grasps['transl'][i, :]
         palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(
             transl, rot_matrix)
-        if i == highlight_idx:
-            frame = o3d.geometry.TriangleMesh.create_coordinate_frame(0.065).transform(
-                palm_pose_centr)
+        
+        if prob is not None:
+            frame_size = prob[i] * 5. / 100.0 
         else:
-            frame = o3d.geometry.TriangleMesh.create_coordinate_frame(0.0075).transform(
+            frame_size = 0.0075
+        frame = o3d.geometry.TriangleMesh.create_coordinate_frame(frame_size).transform(
                 palm_pose_centr)
         frames.append(frame)
 
@@ -373,8 +382,7 @@ def show_generated_grasp_distribution(pcd_path,
         search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.02, max_nn=100))
     frames.append(obj)
     if custom_vis:
-        origin = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                size=0.1)
+        origin = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1)
         frames.append(origin)
         vis = o3d.visualization.Visualizer()
         vis.create_window()
@@ -400,68 +408,96 @@ def show_generated_grasp_distribution(pcd_path,
     else:
         o3d.visualization.draw_geometries(frames)
 
-def show_generated_grasp_distribution_with_prob(pcd_path,
-                                      grasps,
-                                      prob,
-                                      custom_vis=True,
-                                      save_ix=0):
-    """Visualizes the object point cloud together with the generated grasp distribution.
-
-    Args:
-        path (str): Path to the object pcd
-        grasps (dict): contains arrays rot_matrix [n*3*3], palm transl [n*3], joint_conf [n*15]
-    """
+def viz_grasp_w_hand_o3d(pcd_path, grasps, step=1):
     n_samples = grasps['rot_matrix'].shape[0]
     frames = []
-    for i in range(n_samples):
-        # i = 0
+    COL = MplColorHelper('viridis', min(grasps['log_prob'].reshape(-1)), max(grasps['log_prob'].reshape(-1)))
+    # COL = MplColorHelper('viridis', 0, 51)
+    for i in range(0, n_samples, step):
+        joint_conf = grasps['joint_conf'][i]
         rot_matrix = grasps['rot_matrix'][i, :, :]
         transl = grasps['transl'][i, :]
-        palm_pose_centr = utils.hom_matrix_from_transl_rot_matrix(
-            transl, rot_matrix)
-        frame_size = prob[i] * 5. / 100.0 
-        frame = o3d.geometry.TriangleMesh.create_coordinate_frame(frame_size).transform(palm_pose_centr)
-        frames.append(frame)
+        hand_pose = utils.hom_matrix_from_transl_rot_matrix(transl, rot_matrix)
+        robot_mesh = create_robot_mesh_from_joints(joint_conf, hand_pose)
 
-    # visualize
-    ## If you want to add origin, this
-    # orig = o3d.geometry.TriangleMesh.create_coordinate_frame(0.001)
+        # downsample robot pointcloud
+        robot_points = np.asarray(robot_mesh.vertices)
+        n_pcd_robot = int(len(robot_points)/30)
+        pcd_robot = robot_mesh.sample_points_uniformly(number_of_points=n_pcd_robot)
+        pcd_robot_points = np.asarray(pcd_robot.points)
+        pcd_robot_colors = np.zeros(pcd_robot_points.shape)
+
+        # # set color for each grasp
+        grasp_unc = grasps['log_prob'][i]
+        pcd_robot_colors[:] = COL.get_rgb(grasp_unc)[:3] # (0.0, 0.0, grasp_unc*1.0/10.0) # 
+        pcd_robot.colors = o3d.utility.Vector3dVector(pcd_robot_colors)
+        # robot_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd_robot, 0.01)
+        # robot_mesh.compute_vertex_normals()
+        # radii = [0.005, 0.01, 0.02, 0.04]
+        # pcd_robot.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.02, max_nn=100))
+        # robot_mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(pcd_robot, o3d.utility.DoubleVector(radii))
+        frames.append(pcd_robot)
+
+    # add origin
+    # orig = o3d.geometry.TriangleMesh.create_coordinate_frame(frame_size)
     # orig = orig.scale(5, center=orig.get_center())
     # frames.append(orig)
 
+    # add obj pcd
     obj = o3d.io.read_point_cloud(pcd_path)
-    #obj = obj.voxel_down_sample(0.002)
-    obj.paint_uniform_color([230. / 255., 230. / 255., 10. / 255.])
-    obj.estimate_normals(
-        search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.02, max_nn=100))
+    obj.paint_uniform_color([230. / 255., 10. / 255., 10. / 255.])
+    # obj.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(radius=0.02, max_nn=100))
     frames.append(obj)
-    if custom_vis:
-        origin = o3d.geometry.TriangleMesh.create_coordinate_frame(
-                size=0.1)
-        frames.append(origin)
-        vis = o3d.visualization.Visualizer()
-        vis.create_window()
-        for f in frames:
-            vis.add_geometry(f)
+    o3d.visualization.draw_geometries(frames, window_name='Predicted Grasps Configurations')
 
-        # ctr = vis.get_view_control()
-        # param = o3d.io.read_pinhole_camera_parameters(os.path.join(BASE_PATH,"FFHNet/config/view_point.json"))
-        # ctr.convert_from_pinhole_camera_parameters(param)
-        # vis.get_render_option().load_from_json(os.path.join(BASE_PATH,"FFHNet/config/render_opt.json"))
-        vis.run()
-        # if save_ix != -1:
-        #     key = input("Save image?: ")
-        #     if key == 'y':
-        #         vis.capture_screen_image("/home/yb/Pictures/ffhflow/{}.png".format(save_ix))
 
-        vis.destroy_window()
-        # vis.get_render_option().save_to_json("/home/vm/hand_ws/src/FFHNet/render_opt.json")
-        # param = vis.get_view_control().convert_to_pinhole_camera_parameters()
-        # o3d.io.write_pinhole_camera_parameters("/home/vm/hand_ws/src/FFHNet/view_point.json",
-        #                                        param)
+def viz_grasp_w_hand_pyrender(pcd_path, grasps, step=1):
+    n_samples = grasps['rot_matrix'].shape[0]
+    scene = pyrender.Scene()
+    for i in range(0, n_samples, step):
+        joint_conf = grasps['joint_conf'][i]
+        rot_matrix = grasps['rot_matrix'][i, :, :]
+        transl = grasps['transl'][i, :]
+        hand_pose = utils.hom_matrix_from_transl_rot_matrix(transl, rot_matrix)
+        robot_meshes = create_robot_mesh_from_joints_pyrender(joint_conf, hand_pose, grasps['log_prob'][i]) 
+        for mesh_pose in robot_meshes:
+            scene.add(mesh_pose)
 
-    else:
-        o3d.visualization.draw_geometries(frames)
+    # add obj pcd
+    obj = o3d.io.read_point_cloud(pcd_path)
+    pts = np.asarray(obj.points)
+    obj_geometry = pyrender.Mesh.from_points(pts, colors=np.tile([55, 0, 0], (pts.shape[0], 1)))
+    scene.add(obj_geometry, pose=np.eye(4))
+
+    # Add more light to scene
+    pose_light = np.eye(4)
+    pose_light[:3, 3] = [-0.5, 0, 0]
+    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
+    pose_light = np.eye(4)
+    pose_light[:3, 3] = [0.5, 0, 0]
+    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
+    pose_light = np.eye(4)
+    pose_light[:3, 3] = [0, 0.9, 0]
+    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
+    pose_light = np.eye(4)
+    pose_light[:3, 3] = [0, -0.9, 0]
+    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
+
+    # T_view_1 = np.array([[0.38758592, 0.19613444, -0.90072662, -0.54629509],
+    #                      [0.34160963, -0.93809507, -0.05727561, -0.12045398],
+    #                      [-0.85620091, -0.28549766, -0.43059386, -0.25333053], [0., 0., 0., 1.]])
+    T_view_2 = np.array([[0.38043475, 0.20440112, -0.90193658, -0.48869244],
+                         [0.36146523, -0.93055351, -0.05842123, -0.11668246],
+                         [-0.85124161, -0.30379325, -0.4278988, -0.22640526], [0., 0., 0., 1.]])
+
+    # View the scene
+    cam = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
+    # print(scene.scale)
+    nc = pyrender.Node(camera=cam, matrix=T_view_2)
+    scene.add_node(nc)
+
+    pyrender.Viewer(scene, viewer_flags={"fullscreen": False}, use_raymond_lighting=True)
+
 
 def show_generated_grasp_distribution_pos_neg(pcd_path,
                                       grasps,
@@ -544,25 +580,6 @@ def show_generated_grasp_distribution_pos_neg(pcd_path,
         o3d.visualization.draw_geometries(frames)
 
 
-def show_individual_ground_truth_grasps(obj_name, grasp_data_path, outcome='positive'):
-    # Get mesh for object
-    mesh_path = get_mesh_path(obj_name)
-
-    # Get the ground truth grasps
-    data_handler = GraspDataHandlerVae(file_path=grasp_data_path)
-    palm_poses, joint_confs, num_succ = data_handler.get_grasps_for_object(obj_name,
-                                                                           outcome=outcome)
-
-    # Display the grasps in a loop
-    for i, (palm_pose, joint_conf) in enumerate(zip(palm_poses, joint_confs)):
-        palm_hom = utils.hom_matrix_from_pos_quat_list(palm_pose)
-        th = joint_conf[16]
-        joint_conf = np.zeros(20)
-        joint_conf[16] = th
-        show_grasp_and_object(mesh_path, palm_hom, joint_conf)
-        print(joint_conf)
-
-
 def show_ground_truth_grasp_distribution(obj_name, grasp_data_path, gazebo_obj_path):
     """Shows all the ground truth positive grasps for an object.
 
@@ -592,226 +609,7 @@ def show_ground_truth_grasp_distribution(obj_name, grasp_data_path, gazebo_obj_p
     frames.append(mesh)
     frames.append(orig)
     o3d.visualization.draw_geometries(frames)
-
-def show_grasp_and_object_given_pcd(pcd, centr_T_palm, joint_conf):
-    """Visualize the grasp object and the hand relative to it. Here the pcd is already transformed to grasp center
-
-    Args:
-        pcd: point cloud i open3d format, in world/base frame
-        centr_T_palm (4*4 array): Homogeneous transform that describes the grasp (palm pose) w.r.t to point cloud centroid.
-        joint_conf (15 or 20*1 array): 15 or 20 dimensional joint configuration
-    """
-    robot = URDF.load(os.path.join(
-        BASE_PATH, 'meshes/hithand_palm/hithand.urdf'))
-
-    # get the full joint config
-    if joint_conf.shape[0] == 15:
-        joint_conf_full = utils.full_joint_conf_from_partial_joint_conf(
-            joint_conf)
-    elif joint_conf.shape[0] == 20:
-        joint_conf_full = joint_conf
-    else:
-        raise Exception('Joint_conf has the wrong size in dimension one: %d. Should be 15 or 20' %
-                        joint_conf.shape[0])
-    # if you want to show hand pregrasp pose with finger straight.
-    joint_conf_full = np.zeros(20)
-    cfg_map = utils.get_hand_cfg_map(joint_conf_full)
-
-    # compute fk for meshes and links
-    fk = robot.visual_trimesh_fk(cfg=cfg_map)
-    fk_link = robot.link_fk()
-    assert robot.links[2].name == 'palm_link_hithand'  # link 2 must be palm
-    # get the transform from base to palm
-    hand_base_T_palm = fk_link[robot.links[2]]
-
-    # Compute the transform from base to object centroid frame
-    palm_T_centr = np.linalg.inv(centr_T_palm)
-    hand_base_T_centr = np.matmul(hand_base_T_palm, palm_T_centr)
-
-    # Turn open3d pcd into pyrender mesh or load trimesh from path
-
-    # pcd.translate(-1*pcd.get_center())
-    pts = np.asarray(pcd.points)
-
-    obj_geometry = pyrender.Mesh.from_points(pts,
-                                                 colors=np.tile([55, 55, 4], (pts.shape[0], 1)))
-
-    # Construct a scene
-    scene = pyrender.Scene()
-
-    centr_T_hand_base = np.linalg.inv(hand_base_T_centr)
-    # Add the robot to the scene
-    for tm in fk:
-        pose = fk[tm]
-        pose = np.matmul(centr_T_hand_base, pose)
-        mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-        scene.add(mesh, pose=pose)
-
-    # Add cloud to scene
-    # centr_T_base
-    scene.add(obj_geometry, pose=np.eye(4))
-
-    # Add more light to scene
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [-0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, 0.9, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, -0.9, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-
-    T_view_1 = np.array([[0.38758592, 0.19613444, -0.90072662, -0.54629509],
-                         [0.34160963, -0.93809507, -0.05727561, -0.12045398],
-                         [-0.85620091, -0.28549766, -0.43059386, -0.25333053], [0., 0., 0., 1.]])
-    T_view_2 = np.array([[0.38043475, 0.20440112, -0.90193658, -0.48869244],
-                         [0.36146523, -0.93055351, -0.05842123, -0.11668246],
-                         [-0.85124161, -0.30379325, -0.4278988, -0.22640526], [0., 0., 0., 1.]])
-
-    # View the scene
-    cam = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
-    # print(scene.scale)
-    nc = pyrender.Node(camera=cam, matrix=T_view_2)
-    scene.add_node(nc)
-
-    pyrender.Viewer(scene, viewer_flags={
-                    "fullscreen": False}, use_raymond_lighting=True)
-
-
-def show_grasp_and_object(path, palm_T_centr, joint_conf):
-    """Visualize the grasp object and the hand relative to it
-
-    Args:
-        path (str): Path to bps or pointcloud or mesh of object
-        palm_T_centr (4*4 array): Homogeneous transform that describes the grasp (palm pose) w.r.t to object centroid.
-        joint_conf (15 or 20*1 array): 15 or 20 dimensional joint configuration
-    """
-    robot = URDF.load(os.path.join(
-        BASE_PATH, 'meshes/hithand_palm/hithand.urdf'))
-
-    # get the full joint config
-    if joint_conf.shape[0] == 15:
-        joint_conf_full = utils.full_joint_conf_from_partial_joint_conf(
-            joint_conf)
-    elif joint_conf.shape[0] == 20:
-        joint_conf_full = joint_conf
-    else:
-        raise Exception('Joint_conf has the wrong size in dimension one: %d. Should be 15 or 20' %
-                        joint_conf.shape[0])
-    cfg_map = utils.get_hand_cfg_map(joint_conf_full)
-
-    # compute fk for meshes and links
-    fk = robot.visual_trimesh_fk(cfg=cfg_map)
-    fk_link = robot.link_fk()
-    assert robot.links[2].name == 'palm_link_hithand'  # link 2 must be palm
-    # get the transform from base to palm
-    palm_T_base = fk_link[robot.links[2]]
-
-    # Compute the transform from base to object centroid frame
-    centr_T_palm = np.linalg.inv(palm_T_centr)
-    centr_T_base = np.matmul(palm_T_base, centr_T_palm)
-
-    # Turn open3d pcd into pyrender mesh or load trimesh from path
-    if 'bps' in path or 'pcd' in path:
-        obj_pcd = utils.load_rendered_pcd(path)
-        pts = np.asarray(obj_pcd.points)
-        obj_geometry = pyrender.Mesh.from_points(pts,
-                                                 colors=np.tile([55, 55, 4], (pts.shape[0], 1)))
-    else:
-        mesh = trimesh.load_mesh(path)
-        obj_geometry = pyrender.Mesh.from_trimesh(mesh,
-                                                  material=pyrender.MetallicRoughnessMaterial(
-                                                      emissiveFactor=[
-                                                          255, 0, 0],
-                                                      doubleSided=True,
-                                                      baseColorFactor=[255, 0, 0, 1]))
-
-    # Construct a scene
-    scene = pyrender.Scene()
-
-    base_T_centr = np.linalg.inv(centr_T_base)
-    # Add the robot to the scene
-    for tm in fk:
-        pose = fk[tm]
-        pose = np.matmul(base_T_centr, pose)
-        mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-        scene.add(mesh, pose=pose)
-
-    # Add cloud to scene
-    # centr_T_base
-    scene.add(obj_geometry, pose=np.eye(4))
-
-    # Add more light to scene
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [-0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, 0.9, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, -0.9, 0]
-    scene.add(pyrender.PointLight(intensity=10), pose=pose_light)
-
-    T_view_1 = np.array([[0.38758592, 0.19613444, -0.90072662, -0.54629509],
-                         [0.34160963, -0.93809507, -0.05727561, -0.12045398],
-                         [-0.85620091, -0.28549766, -0.43059386, -0.25333053], [0., 0., 0., 1.]])
-    T_view_2 = np.array([[0.38043475, 0.20440112, -0.90193658, -0.48869244],
-                         [0.36146523, -0.93055351, -0.05842123, -0.11668246],
-                         [-0.85124161, -0.30379325, -0.4278988, -0.22640526], [0., 0., 0., 1.]])
-
-    # View the scene
-    cam = pyrender.PerspectiveCamera(yfov=np.pi / 3.0)
-    # print(scene.scale)
-    nc = pyrender.Node(camera=cam, matrix=T_view_2)
-    scene.add_node(nc)
-
-    pyrender.Viewer(scene, viewer_flags={
-                    "fullscreen": False}, use_raymond_lighting=True)
-
-
-def render_hand_in_configuration(cfg=np.zeros(20)):
-    path = os.path.dirname(os.path.abspath(__file__))
-    robot = URDF.load(os.path.join(
-        BASE_PATH, 'meshes/hithand_palm/hithand.urdf'))
-
-    cfg_map = utils.get_hand_cfg_map(cfg)
-
-    # compute fk for meshes and links
-    fk = robot.visual_trimesh_fk(cfg=cfg_map)
-
-    # Construct a scene
-    scene = pyrender.Scene()
-
-    # Add the robot to the scene
-    for tm in fk:
-        pose = fk[tm]
-        mesh = pyrender.Mesh.from_trimesh(tm, smooth=False)
-        scene.add(mesh, pose=pose)
-
-    # Add more light to scene
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [-0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=6), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0.5, 0, 0]
-    scene.add(pyrender.PointLight(intensity=6), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, 0.9, 0]
-    scene.add(pyrender.PointLight(intensity=6), pose=pose_light)
-    pose_light = np.eye(4)
-    pose_light[:3, 3] = [0, -0.9, 0]
-    scene.add(pyrender.PointLight(intensity=6), pose=pose_light)
-
-    # View the scene
-    pyrender.Viewer(scene, use_raymond_lighting=True)
-
+    
 
 def show_pcd_and_bps(pcd_path):
     obj_pcd = o3d.io.read_point_cloud(pcd_path)
@@ -950,7 +748,6 @@ def plot_2D_gaussian():
     ax1.set_axis_off()
     plt.show()
 
-
 def plot_filtered_grasps_per_threshold(path_to_csv):
     """Plots a graph where the x-axis is the threshold of the FFHEvaluator evaluation, below which grasps are rejected
     and y-axis is the percentage of reamining grasps
@@ -980,61 +777,62 @@ def plot_filtered_grasps_per_threshold(path_to_csv):
     fig.savefig(save_path)
 
 
-def plot_ffhevaluator_accuracy_curve(acc_type, exp_type='layers'):
-    plt.style.use(['science', 'grid'])
-    matplotlib.rcParams.update({'font.size': 12})
-    if acc_type == 'mean':
-        n = 'Mean'
-    elif acc_type == 'positive':
-        n = 'Positive'
-    elif acc_type == 'negative':
-        n = 'Negative'
-    pparam = dict(title='Evaluation Accuracy: ' + n,
-                  xlabel='Epoch', ylabel='Accuracy')
+# def plot_ffhevaluator_accuracy_curve(acc_type, exp_type='layers'):
+#     plt.style.use(['science', 'grid'])
+#     matplotlib.rcParams.update({'font.size': 12})
+#     if acc_type == 'mean':
+#         n = 'Mean'
+#     elif acc_type == 'positive':
+#         n = 'Positive'
+#     elif acc_type == 'negative':
+#         n = 'Negative'
+#     pparam = dict(title='Evaluation Accuracy: ' + n,
+#                   xlabel='Epoch', ylabel='Accuracy')
 
-    # Choose experiments
-    assert (exp_type == 'layers' or exp_type == 'neurons')
-    accs_exps = exps[exp_type]
+#     # Choose experiments
+#     assert (exp_type == 'layers' or exp_type == 'neurons')
+#     accs_exps = exps[exp_type]
 
-    epochs = [0, 5, 10, 15, 20, 25, 30, 35]
+#     epochs = [0, 5, 10, 15, 20, 25, 30, 35]
 
-    mean_accs = []
-    mean_acc = []
-    keys = accs_exps.keys() if isinstance(accs_exps, collections.OrderedDict) else sorted(
-        accs_exps.keys())
-    for key in keys:
-        mean_acc = []
-        (acc_pos, acc_neg) = accs_exps[key]
-        for (p, n) in zip(acc_pos, acc_neg):
-            if acc_type == 'mean':
-                mean_acc.append((p + n) / 2.)
-            elif acc_type == 'positive':
-                mean_acc.append(p)
-            elif acc_type == 'negative':
-                mean_acc.append(n)
-        mean_accs.append(mean_acc)
+#     mean_accs = []
+#     mean_acc = []
+#     keys = accs_exps.keys() if isinstance(accs_exps, collections.OrderedDict) else sorted(
+#         accs_exps.keys())
+#     for key in keys:
+#         mean_acc = []
+#         (acc_pos, acc_neg) = accs_exps[key]
+#         for (p, n) in zip(acc_pos, acc_neg):
+#             if acc_type == 'mean':
+#                 mean_acc.append((p + n) / 2.)
+#             elif acc_type == 'positive':
+#                 mean_acc.append(p)
+#             elif acc_type == 'negative':
+#                 mean_acc.append(n)
+#         mean_accs.append(mean_acc)
 
-    fig, ax = plt.subplots()
-    for mean_acc, label in zip(mean_accs, keys):
-        ax.plot(epochs, mean_acc, label=label)
-    ax.legend()
-    ax.autoscale(tight=True)
-    ax.set(**pparam)
-    ax.set_ylim([0.6, 0.95])
-    save_path = os.path.join('figures/ffheva_exps', exp_type,
-                             exp_type + '_eva_accuracy_' + acc_type + '.pdf')
-    fig.savefig(save_path)
+#     fig, ax = plt.subplots()
+#     for mean_acc, label in zip(mean_accs, keys):
+#         ax.plot(epochs, mean_acc, label=label)
+#     ax.legend()
+#     ax.autoscale(tight=True)
+#     ax.set(**pparam)
+#     ax.set_ylim([0.6, 0.95])
+#     save_path = os.path.join('figures/ffheva_exps', exp_type,
+#                              exp_type + '_eva_accuracy_' + acc_type + '.pdf')
+#     fig.savefig(save_path)
 
-    save_path_thesis = '/home/vm/Documents/thesis/master_thesis/figures/chapter_05/eva_training'
-    save_path = os.path.join(save_path_thesis, exp_type,
-                             exp_type + '_eva_accuracy_' + acc_type + '.pdf')
-    fig.savefig(save_path)
+#     save_path_thesis = '/home/vm/Documents/thesis/master_thesis/figures/chapter_05/eva_training'
+#     save_path = os.path.join(save_path_thesis, exp_type,
+#                              exp_type + '_eva_accuracy_' + acc_type + '.pdf')
+#     fig.savefig(save_path)
 
-    plt.show()
+#     plt.show()
 
 
 if __name__ == '__main__':
-    icra_22_video_submission_visualization()
+    pass
+    # icra_22_video_submission_visualization()
     # plot_threshold_success_curve()
     # path_to_csv = '/home/vm/hand_ws/src/FFHNet/results/filt_diff_thresh.csv'
     # plot_filtered_grasps_per_threshold(path_to_csv)

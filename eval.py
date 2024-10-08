@@ -206,6 +206,14 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 # show gt grasps
                 # grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][obj_idx])
                 # model.show_gt_grasps(batch['pcd_path'][obj_idx], grasps_gt, obj_idx+300,frame_size=0.015, obj_name=batch['obj_name'][obj_idx])
+            elif mode == "viz_grasps_w_hands":
+                predicted_grasps = model.sample(batch, 
+                                                obj_idx, 
+                                                num_samples=latent_flow_n_samples,
+                                                avg_grasps=avg_grasps,
+                                                grasp_flow_n_samples=grasp_flow_n_samples,
+                                                posterior_score=posterior_score)
+                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, w_hands=True)
             elif mode == "viz_grasps_w_scores":
                 predicted_grasps = model.sample(batch, 
                                                 obj_idx, 
@@ -213,16 +221,7 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                                                 avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
                                                 posterior_score=posterior_score)
-                
-                prob = predicted_grasps['log_prob']
-                prob_min = prob.min()
-                prob_max = prob.max()
-                prob = (prob - prob_min) / (prob_max - prob_min) + 0.1
-                # original_path = batch['pcd_path'][idx]
-                # parts = original_path.split('/')
-                # new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
-                # new_parts = '/'.join(new_parts)
-                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, obj_idx, prob=prob)
+                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, w_hands=False)
             elif mode == "viz_neg_pos_hist":
                 posterior_score = "neg_kl"
                 pos_scores, neg_scores = get_scores_per_item(model, posterior_score, batch, obj_idx)
@@ -262,7 +261,6 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 parts = original_path.split('/')
                 new_parts = ['/data', 'net', 'userstore','qf','hithand_data','data'] + parts[5:]
                 new_parts = '/'.join(new_parts)
-
                 model.show_grasps(new_parts, predicted_grasps, obj_idx, prob=prob)
             else:
                 print("Please specify the mode for visualization.")
@@ -331,14 +329,14 @@ if __name__ == "__main__":
 
         print(f"Reading val batch from file: {val_fn}")
         first_batch = torch.load(val_fn, map_location="cuda:0") 
-        # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_pose_transl_var", "pred_log_var", "pred_pose_angle_var"，"pred_post_pose_var", "pred_pose_var"
+        # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_transl_var", "pred_log_var", "pred_pose_angle_var"，"pred_post_pose_var", "pred_pose_var"
         # mode: "viz_transl_dist", "viz_grasps_wo_scores", "viz_grasps_w_scores", "viz_neg_pos_hist", "filter_with_eval", "filter_with_prob"
         visualize(first_batch, 
-                  mode="viz_grasps_w_scores", 
-                  latent_flow_n_samples=100, 
-                  grasp_flow_n_samples=50, 
-                  posterior_score="pred_post_pose_var", 
-                  avg_grasps=True)
+                  mode="viz_grasps_w_hands", 
+                  latent_flow_n_samples=10, 
+                  grasp_flow_n_samples=1, 
+                  posterior_score=None, 
+                  avg_grasps=False)
     
     if MAAD:
         val_fn = 'data/eval_batch.pth'
