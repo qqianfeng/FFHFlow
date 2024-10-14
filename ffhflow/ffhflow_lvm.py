@@ -415,9 +415,9 @@ class FFHFlowLVM(Metaclass):
             gaussian_ent = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1))
             pos_prior_kl = -prior_ll - gaussian_ent
             score = -pos_prior_kl
-        elif score_type == "cross_prior_pos":
-            gaussian_ll_mean = -0.5 * ((prior_z - cond_mean) ** 2) / torch.exp(cond_logvar)
-            score = 0.5 * torch.add(cond_logvar.shape[1] * (1.0 + np.log(2.0 * np.pi)), cond_logvar.sum(1)) + gaussian_ll_mean.sum(1)
+        elif score_type == "mutual_info":
+            posterior_ll = -0.5 * ((prior_z - cond_mean) ** 2) / torch.exp(cond_logvar)
+            score = posterior_ll.mean(1) - prior_ll.mean(1)
 
         if return_feats:
             return score, conditioning_feats
@@ -502,7 +502,7 @@ class FFHFlowLVM(Metaclass):
             
         if posterior_score is not None:
             pred_grasps = torch.cat([pred_angles, pred_transl, pred_joint_conf], dim=-1)
-            log_prob = self._compute_posterior_score(pcd_feats, pred_grasps, score_type=posterior_score)
+            log_prob = self._compute_posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, prior_ll=prior_log_prob)
 
         output = {}
         output['log_prob'] = log_prob # + prior_log_prob[:, None]
