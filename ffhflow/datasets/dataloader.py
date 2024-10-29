@@ -14,15 +14,12 @@ from ffhflow.configs import get_config
 
 
 class FFHGeneratorDataset(data.Dataset):
-    def __init__(self, cfg, eval=False, dtype=torch.float32):
-        if eval:
-            ds_name = "eval"
-        else:
-            ds_name = "train"
+    def __init__(self, cfg, ds_name, dtype=torch.float32):
 
         self.dtype = dtype
-
         self.ds_path = os.path.join(cfg.DATASETS.PATH, ds_name)
+        if "eval" in ds_name:
+            ds_name = 'eval'
         self.objs_names = self.get_objs_names(self.ds_path)
         self.objs_folder = os.path.join(self.ds_path, 'bps')
         self.grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)

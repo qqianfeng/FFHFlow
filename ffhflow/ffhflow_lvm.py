@@ -401,7 +401,7 @@ class FFHFlowLVM(Metaclass):
         return log_prob
 
     def _compute_posterior_score(self, pcd_feats, pred_grasps, score_type="log_prob", prior_z=None, return_feats=False, prior_ll=None):
-        pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0], dim=0)
+        pcd_feats = torch.repeat_interleave(pcd_feats, pred_grasps.shape[0]//pcd_feats.shape[0], dim=0)
         pcd_grasps_feats = torch.cat([pcd_feats, pred_grasps], dim=1)
         cond_mean, cond_logvar, conditioning_feats = self.posterior_nn(pcd_grasps_feats, return_mean_var=True)
         if score_type == "log_prob":
@@ -433,7 +433,7 @@ class FFHFlowLVM(Metaclass):
         padding_zero = torch.zeros([grasps.shape[0], 1]).to('cuda')
         grasps = torch.cat([grasps, padding_zero], dim=1)
         pcd_feats = self.pcd_enc(bps_tensor)
-        posterior_score = self._posterior_score(pcd_feats, grasps, score_type=posterior_score)
+        posterior_score = self._compute_posterior_score(pcd_feats, grasps, score_type=posterior_score)
 
         return posterior_score.view(-1)
 
@@ -443,7 +443,7 @@ class FFHFlowLVM(Metaclass):
         prob = (prob - prob_min) / (prob_max - prob_min)
         return prob
 
-    def sample(self, batch, idx, num_samples, grasp_flow_n_samples=1, posterior_score=None, avg_grasps=False):
+    def sample(self, batch, num_samples, grasp_flow_n_samples=1, idx=None, posterior_score=None, avg_grasps=False):
         """ generate number of grasp samples
 
         Args:
@@ -456,14 +456,18 @@ class FFHFlowLVM(Metaclass):
         self.num_samples = num_samples
         self.grasp_flow_n_samples = grasp_flow_n_samples
         self.posterior_score = posterior_score
+        batch_size = batch['bps_object'].shape[0]
 
-        if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
-            padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
-            batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
+        # if self.cfg['BASE_PACKAGE'] == 'normflows' and batch['joint_conf'].shape[1]%2 != 0:
+        #     padding_zero = torch.zeros([batch['joint_conf'].shape[0], 1]).to('cuda')
+        #     batch['joint_conf'] = torch.cat([batch['joint_conf'], padding_zero], dim=1)
 
         # move data to cuda
-        bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda')
-        bps_tensor = bps_tensor.view(1,-1)
+        if idx is not None:
+            bps_tensor = batch['bps_object'][idx].to(dtype=torch.float64).to('cuda')
+            bps_tensor = bps_tensor.view(1,-1)
+        else:
+            bps_tensor = batch['bps_object'].to(dtype=torch.float64).to('cuda')
 
         # move model to cuda
         self.prior_flow.to('cuda')
@@ -474,11 +478,11 @@ class FFHFlowLVM(Metaclass):
         # extract pcd feats
         pcd_feats = self.pcd_enc(bps_tensor)
         # If ActNorm layers are not initialized, initialize them
-        if not self.initialized:
-            batch_size = batch['bps_object'].shape[0]
-            pcd_feats_temp = pcd_feats.repeat(batch_size, 1)
-            self.initialize(batch, pcd_feats_temp)
-            del pcd_feats_temp
+        # if not self.initialized:
+        #     batch_size = batch['bps_object'].shape[0]
+        #     pcd_feats_temp = pcd_feats.repeat(batch_size, 1)
+        #     self.initialize(batch, pcd_feats_temp)
+        #     del pcd_feats_temp
 
         # sample from prior flow  L * D and L * 1
         conditioning_feats, prior_log_prob = self.prior_flow.sample(pcd_feats, num_samples=num_samples)
@@ -494,7 +498,7 @@ class FFHFlowLVM(Metaclass):
                 pred_transl = (pred_transl*log_prob_weights[:,:,None]).sum(1) # L * 3
                 pred_joint_conf = (pred_joint_conf*log_prob_weights[:,:,None]).sum(1) # L * 15
                 log_prob = torch.mean(log_prob, dim=1)
-        elif grasp_flow_n_samples == 1:
+        else:
             pred_angles = pred_angles.squeeze(1)
             pred_transl = pred_transl.squeeze(1)
             pred_joint_conf = pred_joint_conf.squeeze(1)
@@ -502,10 +506,11 @@ class FFHFlowLVM(Metaclass):
             
         if posterior_score is not None:
             pred_grasps = torch.cat([pred_angles, pred_transl, pred_joint_conf], dim=-1)
-            log_prob = self._compute_posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, prior_ll=prior_log_prob)
+            log_prob = self._compute_posterior_score(pcd_feats, pred_grasps, score_type=posterior_score, prior_z=conditioning_feats, prior_ll=prior_log_prob)
 
         output = {}
         output['log_prob'] = log_prob # + prior_log_prob[:, None]
+        output['prior_log_prob'] = prior_log_prob
         output['pred_angles'] = pred_angles
         output['pred_pose_transl'] = pred_transl
         output['pred_joint_conf'] = pred_joint_conf[:,:15]
@@ -567,6 +572,7 @@ class FFHFlowLVM(Metaclass):
             samples['transl'] = pred_transl_all
             samples['joint_conf'] = samples['pred_joint_conf'].cpu().data.numpy()
             samples['log_prob'] = samples['log_prob'].cpu().data.numpy()
+            samples['prior_log_prob'] = samples['prior_log_prob'].cpu().data.numpy()
 
         else:
             samples['rot_matrix'] = torch.from_numpy(pred_rot_matrix).cuda()

@@ -5,7 +5,6 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from sklearn.manifold import TSNE
 from tqdm import tqdm
 import pickle
 import transforms3d
@@ -26,12 +25,12 @@ def load_batch(path):
     return torch.load(path, map_location="cuda:0")
 
 
-def compute_maad(batch):
+def compute_maad(batch, val_dataset):
     transl_loss_sum = 0
     rot_loss_sum = 0
     joint_loss_sum = 0
     coverage_sum = 0
-    print(f"len(val_loader): {len(val_loader)}")
+    # print(f"len(val_loader): {len(val_loader)}")
     num_nan_out = 0
     num_nan_transl = 0
     num_nan_rot = 0
@@ -59,7 +58,7 @@ def compute_maad(batch):
     with torch.no_grad():
         print(batch['obj_name'])
         for idx in range(len(batch['obj_name'])):
-            palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
+            # palm_poses, joint_confs, num_pos = grasp_data.get_grasps_for_object(obj_name=batch['obj_name'][idx],outcome='positive')
             grasps_gt = val_dataset.get_grasps_from_pcd_path(batch['pcd_path'][idx])
 
             # out = model.sample(batch['bps_object'][idx], num_samples=100)
@@ -127,6 +126,7 @@ def plot_transl_dist(pred_pose_transl):
     ax.legend()
     fig.show()
 
+
 def get_grasps_from_pcd_path(pcd_path, label, val_dataset):
     grasps = val_dataset.get_grasps_from_pcd_path(pcd_path, label=label)
     pred_angles = []
@@ -142,6 +142,7 @@ def get_grasps_from_pcd_path(pcd_path, label, val_dataset):
 
     return grasps
 
+
 def get_scores_per_item(model, posterior_score, batch, obj_idx, val_dataset):
     pos_grasps = get_grasps_from_pcd_path(batch['pcd_path'][obj_idx], 'positive', val_dataset)
     neg_grasps = get_grasps_from_pcd_path(batch['pcd_path'][obj_idx], 'negative', val_dataset)
@@ -152,6 +153,7 @@ def get_scores_per_item(model, posterior_score, batch, obj_idx, val_dataset):
     neg_scores = model.compute_grasp_score(neg_grasps, posterior_score, bps_tensor).detach().cpu().numpy()
     pos_scores = model.compute_grasp_score(pos_grasps, posterior_score, bps_tensor).detach().cpu().numpy()
     return pos_scores, neg_scores
+
 
 def get_grasps_score_hist(val_loader, model, val_dataset, posterior_score):
     print(f"len(val_loader): {len(val_loader)}")
@@ -179,6 +181,7 @@ def get_grasps_score_hist(val_loader, model, val_dataset, posterior_score):
             scores_per_item[obj_name]["neg"].extend(neg_scores)
 
     return scores_per_item
+
 
 def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, posterior_score=None, avg_grasps=False):
     # print(f"len(val_loader): {len(val_loader)}")
@@ -266,6 +269,40 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 print("Please specify the mode for visualization.")
                 break
 
+
+def load_bps_data(bps_data_path):    
+    for obj_folder in tqdm(os.listdir(bps_data_path)):
+        print(f"Loading {obj_folder}")
+        for npy_file in os.listdir(os.path.join(bps_data_path, obj_folder)):
+            bps_data = np.load(os.path.join(bps_data_path, obj_folder, npy_file)).reshape(1, -1)
+            if 'bps_data_array' in locals():
+                bps_data_array = np.concatenate([bps_data_array, bps_data], axis=0)
+            else:
+                bps_data_array = bps_data
+    return bps_data_array
+
+def compute_posterior_from_pcd(model, bps_data_array, posterior_score, num_samples, batch_size=128):
+    bps_data_array = torch.tensor(bps_data_array).to('cuda')
+    res_scores_flow2 = np.zeros(bps_data_array.shape[0])
+    res_scores_flow1 = np.zeros(bps_data_array.shape[0])
+    for i in range(0, bps_data_array.shape[0], batch_size):
+        if i + batch_size > bps_data_array.shape[0]:
+            bps_data_array_tmp = bps_data_array[i:]
+        else:
+            bps_data_array_tmp = bps_data_array[i:i+batch_size]
+        # print(f"bps_data_array.shape: {bps_data_array_tmp.shape}")
+        batch = {'bps_object': bps_data_array_tmp}
+        out = model.sample(batch, num_samples=num_samples, posterior_score=posterior_score)
+        if i + batch_size > bps_data_array.shape[0]:
+            remaining = bps_data_array.shape[0] - i
+            res_scores_flow2[i:] = out['log_prob'].reshape((remaining, -1)).mean(axis=1)
+            res_scores_flow1[i:] = out['prior_log_prob'].reshape((remaining, -1)).mean(axis=1)
+        else:
+            res_scores_flow2[i:i+batch_size] = out['log_prob'].reshape((batch_size, -1)).mean(axis=1)
+            res_scores_flow1[i:i+batch_size] = out['prior_log_prob'].reshape(batch_size, -1).mean(axis=1)
+
+    return res_scores_flow1, res_scores_flow2
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -276,39 +313,69 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
     args = parser.parse_args()
-    Visualization = True
-    MAAD = False
-    Draw_grasp_score_hist = False
-
-    # Set up cfg
+    Visualization, MAAD, Grasps_Score, Shapes_Score = False, False, False, True
     cfg = get_config(args.model_cfg)
 
     # configure dataloader
-    # cfg["TRAIN"]["BATCH_SIZE"] = 1024*8
+    cfg["TRAIN"]["BATCH_SIZE"] = 64 # *8
     ffh_datamodule = FFHDataModule(cfg)
 
     # Setup PyTorch Lightning Trainer
     ckpt_path = args.ckpt_path
-
     if "cnf" in args.model_cfg:
         model = FFHFlowCNF.load_from_checkpoint(ckpt_path, cfg=cfg)
     else:
         model = FFHFlowLVM.load_from_checkpoint(ckpt_path, cfg=cfg)
     model.eval()
 
+    # trn_loader = ffh_datamodule.train_dataloader()
+    # trn_dataset = ffh_datamodule.train_dataset()
     # val_loader = ffh_datamodule.val_dataloader(shuffle=True)
-    val_loader = ffh_datamodule.val_dataloader()
-    trn_loader = ffh_datamodule.train_dataloader()
-    val_dataset = ffh_datamodule.val_dataset()
-    trn_dataset = ffh_datamodule.train_dataset()
+    kit_val_loader = ffh_datamodule.val_dataloader()
+    kit_val_dataset = ffh_datamodule.val_dataset()
 
     # path to save results
     grasp_data_path = os.path.join(cfg.DATASETS.PATH, cfg.DATASETS.GRASP_DATA_NANE)
     grasp_data = GraspDataHandlerVae(grasp_data_path)
 
-    if Draw_grasp_score_hist:
+    if Shapes_Score:
+        num_samples = 100
+        bs = 32
+        posterior_score = None # None, "neg_kl", 'mutual_info'
+        kit_bps_data_path = os.path.join(cfg.DATASETS.PATH, "eval", "bps")
+        ycb_bps_data_path = os.path.join(cfg.DATASETS.PATH, "ycb_eval", "bps")
+        similar_bps_array, novel_bps_array = load_bps_data(kit_bps_data_path), load_bps_data(ycb_bps_data_path)
+        similar_scores1, similar_scores2 = compute_posterior_from_pcd(model, similar_bps_array, posterior_score, num_samples, batch_size=bs)
+        novel_scores1, novel_scores2 = compute_posterior_from_pcd(model, novel_bps_array, posterior_score, num_samples, batch_size=bs)
+
+        n_bins = 50
+        plt.rc('legend',fontsize='xx-large')
+        plt.subplot(2, 1, 1)
+        plt.style.use('seaborn-whitegrid') # nice and clean grid
+        plt.hist(similar_scores1, density=True, bins=n_bins, alpha=0.5,facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Similar Patial Object Point Clouds') 
+        plt.hist(novel_scores1, density=True,  bins=n_bins, alpha=0.5, facecolor='red', edgecolor='red', linewidth=0.5, label='Novel Patial Object Point Clouds') 
+        plt.xlabel('Prior Flow Log Prob') 
+        plt.legend()
+        plt.title(f"Histogram of prior_flow_log_prob for Similar and Novel Shapes", fontsize="xx-large")
+
+        plt.subplot(2, 1, 2)
+        plt.hist(similar_scores2, density=True, bins=n_bins, alpha=0.5, facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Similar Patial Object Point Clouds') 
+        plt.hist(novel_scores2, density=True, bins=n_bins, alpha=0.5, facecolor='red', edgecolor='red', linewidth=0.5, label='Novel Patial Object Point Clouds') 
+        plt.grid(False)
+        if posterior_score is None:
+            plt.xlabel('Log Prob') 
+            plt.title(f"Histogram of grasp_flow_log_prob for Similar and Novel Shapes", fontsize="xx-large")
+        else:
+            plt.xlabel(f'{posterior_score}') 
+            plt.title(f"Histogram of {posterior_score} for Similar and Novel Shapes", fontsize="xx-large")
+        plt.legend()
+        plt.show()
+
+
+    if Grasps_Score:
+        # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_transl_var", "pred_log_var", "pred_pose_angle_var"，"pred_post_pose_var", "pred_pose_var"
         posterior_score = "neg_kl"
-        scores_per_item = get_grasps_score_hist(val_loader, model, val_dataset, posterior_score)
+        scores_per_item = get_grasps_score_hist(kit_val_loader, model, kit_val_dataset, posterior_score)
         # pickle.dump(scores_per_item, open('data/scores_per_item.pkl', 'wb'))
         for k, v in scores_per_item.items():
             pos_scores, neg_scores = v['pos'], v['neg']
@@ -318,11 +385,12 @@ if __name__ == "__main__":
             plt.legend()
             plt.show()
 
+
     if Visualization:
         save_first_batch = False
         val_fn = 'data/eval_batch.pth'
         if save_first_batch:
-            for i, batch in enumerate(val_loader):
+            for i, batch in enumerate(kit_val_loader):
                 print(f"Saving val batch: {i}")
                 torch.save(batch, val_fn)
                 break
@@ -338,13 +406,14 @@ if __name__ == "__main__":
                   posterior_score=None, 
                   avg_grasps=False)
     
+
     if MAAD:
         val_fn = 'data/eval_batch.pth'
-        for i, batch in enumerate(val_loader):
+        for i, batch in enumerate(kit_val_loader):
             print(f"Saving val batch: {i}")
             torch.save(batch, val_fn)
             break
 
         print(f"Reading val batch from file: {val_fn}")
         first_batch = torch.load(val_fn, map_location="cuda:0") 
-        compute_maad(first_batch)
+        compute_maad(first_batch, kit_val_dataset)
