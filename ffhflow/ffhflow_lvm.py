@@ -621,7 +621,7 @@ class FFHFlowLVM(Metaclass):
                     samples: Dict, 
                     w_hands: bool = False,
                     base_path: str = '', 
-                    save: bool = False, 
+                    o3d: bool = True, 
                     prob=None):
 
         if torch.is_tensor(samples['rot_matrix']):
@@ -632,8 +632,10 @@ class FFHFlowLVM(Metaclass):
             samples_copy = samples
 
         if w_hands:
-            viz_grasp_w_hand_o3d(pcd_path, samples_copy, step=1)
-            # viz_grasp_w_hand_pyrender(pcd_path, samples_copy, step=20)
+            if o3d:
+                viz_grasp_w_hand_o3d(pcd_path, samples_copy, step=1)
+            else:
+                viz_grasp_w_hand_pyrender(pcd_path, samples_copy, step=1)
         else:
             show_generated_grasp_distribution(pcd_path, samples_copy, prob=prob)
 

@@ -183,7 +183,7 @@ def get_grasps_score_hist(val_loader, model, val_dataset, posterior_score):
     return scores_per_item
 
 
-def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, posterior_score=None, avg_grasps=False):
+def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, posterior_score=None, o3d=True, avg_grasps=False):
     # print(f"len(val_loader): {len(val_loader)}")
     with torch.no_grad():
         num_obj = len(batch['obj_name'])
@@ -199,7 +199,7 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 plot_transl_dist(predicted_grasps['pred_pose_transl']) 
             elif mode == "viz_grasps_wo_scores":
                 predicted_grasps = model.sample(batch, 
-                                                obj_idx, 
+                                                idx=obj_idx, 
                                                 num_samples=latent_flow_n_samples,
                                                 avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
@@ -211,15 +211,15 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 # model.show_gt_grasps(batch['pcd_path'][obj_idx], grasps_gt, obj_idx+300,frame_size=0.015, obj_name=batch['obj_name'][obj_idx])
             elif mode == "viz_grasps_w_hands":
                 predicted_grasps = model.sample(batch, 
-                                                obj_idx, 
+                                                idx=obj_idx, 
                                                 num_samples=latent_flow_n_samples,
                                                 avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
                                                 posterior_score=posterior_score)
-                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, w_hands=True)
+                model.show_grasps(batch['pcd_path'][obj_idx], predicted_grasps, o3d=o3d, w_hands=True)
             elif mode == "viz_grasps_w_scores":
                 predicted_grasps = model.sample(batch, 
-                                                obj_idx, 
+                                                idx=obj_idx, 
                                                 num_samples=latent_flow_n_samples,
                                                 avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
@@ -235,7 +235,7 @@ def visualize(batch, mode, latent_flow_n_samples=100, grasp_flow_n_samples=30, p
                 plt.show()
             elif mode == "filter_with_eval":
                 predicted_grasps = model.sample(batch, 
-                                                obj_idx, 
+                                                idx=obj_idx, 
                                                 num_samples=latent_flow_n_samples,
                                                 avg_grasps=avg_grasps,
                                                 grasp_flow_n_samples=grasp_flow_n_samples,
@@ -283,6 +283,7 @@ def load_bps_data(bps_data_path):
 
 def compute_posterior_from_pcd(model, bps_data_array, posterior_score, num_samples, batch_size=128):
     bps_data_array = torch.tensor(bps_data_array).to('cuda')
+    res_scores_flow2_max = np.zeros(bps_data_array.shape[0])
     res_scores_flow2 = np.zeros(bps_data_array.shape[0])
     res_scores_flow1 = np.zeros(bps_data_array.shape[0])
     for i in range(0, bps_data_array.shape[0], batch_size):
@@ -303,6 +304,7 @@ def compute_posterior_from_pcd(model, bps_data_array, posterior_score, num_sampl
 
     return res_scores_flow1, res_scores_flow2
 
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -313,7 +315,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
     args = parser.parse_args()
-    Visualization, MAAD, Grasps_Score, Shapes_Score = False, False, False, True
+    Visualization, MAAD, Grasps_Score, Shapes_Score = True, False, False, False
     cfg = get_config(args.model_cfg)
 
     # configure dataloader
@@ -350,25 +352,30 @@ if __name__ == "__main__":
 
         n_bins = 50
         plt.rc('legend',fontsize='xx-large')
-        plt.subplot(2, 1, 1)
-        plt.style.use('seaborn-whitegrid') # nice and clean grid
+        plt.subplot(3, 1, 1)
+        # plt.style.use('seaborn-whitegrid') # nice and clean grid
         plt.hist(similar_scores1, density=True, bins=n_bins, alpha=0.5,facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Similar Patial Object Point Clouds') 
         plt.hist(novel_scores1, density=True,  bins=n_bins, alpha=0.5, facecolor='red', edgecolor='red', linewidth=0.5, label='Novel Patial Object Point Clouds') 
         plt.xlabel('Prior Flow Log Prob') 
         plt.legend()
-        plt.title(f"Histogram of prior_flow_log_prob for Similar and Novel Shapes", fontsize="xx-large")
+        plt.title(f"Histogram of prior_flow_log_prob for Similar and Novel Shapes (averaged over {num_samples} latent samples)", fontsize="xx-large")
 
-        plt.subplot(2, 1, 2)
+        plt.subplot(3, 1, 2)
         plt.hist(similar_scores2, density=True, bins=n_bins, alpha=0.5, facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Similar Patial Object Point Clouds') 
         plt.hist(novel_scores2, density=True, bins=n_bins, alpha=0.5, facecolor='red', edgecolor='red', linewidth=0.5, label='Novel Patial Object Point Clouds') 
         plt.grid(False)
-        if posterior_score is None:
-            plt.xlabel('Log Prob') 
-            plt.title(f"Histogram of grasp_flow_log_prob for Similar and Novel Shapes", fontsize="xx-large")
-        else:
-            plt.xlabel(f'{posterior_score}') 
-            plt.title(f"Histogram of {posterior_score} for Similar and Novel Shapes", fontsize="xx-large")
+        plt.xlabel('Grasp Flow Log Prob') 
+        plt.title(f"Histogram of grasp_flow_log_prob for Similar and Novel Shapes (averaged over {num_samples} grasps)", fontsize="xx-large")
         plt.legend()
+        
+        plt.subplot(3, 1, 3)
+        # plt.style.use('seaborn-whitegrid') # nice and clean grid
+        plt.hist(similar_scores1+similar_scores2, density=True, bins=n_bins, alpha=0.5,facecolor = '#2ab0ff', edgecolor='#169acf', linewidth=0.5, label='Similar Patial Object Point Clouds') 
+        plt.hist(novel_scores1+novel_scores2, density=True,  bins=n_bins, alpha=0.5, facecolor='red', edgecolor='red', linewidth=0.5, label='Novel Patial Object Point Clouds') 
+        plt.xlabel('Prior Flow Log Prob + Grasp Flow Log Prob') 
+        plt.legend()
+        plt.title(f"Histogram of prior_flow_log_prob+grasp_flow_log_prob for Similar and Novel Shapes", fontsize="xx-large")
+
         plt.show()
 
 
@@ -401,9 +408,10 @@ if __name__ == "__main__":
         # mode: "viz_transl_dist", "viz_grasps_wo_scores", "viz_grasps_w_scores", "viz_neg_pos_hist", "filter_with_eval", "filter_with_prob"
         visualize(first_batch, 
                   mode="viz_grasps_w_hands", 
-                  latent_flow_n_samples=10, 
+                  latent_flow_n_samples=5, 
                   grasp_flow_n_samples=1, 
                   posterior_score=None, 
+                  o3d=True,
                   avg_grasps=False)
     
 
