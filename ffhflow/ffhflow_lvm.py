@@ -523,11 +523,13 @@ class FFHFlowLVM(Metaclass):
     def flatten_outputs(self, outputs, unflatten=False):
         if not unflatten:
             outputs['log_prob'] = outputs['log_prob'].reshape(-1)
+            outputs['prior_log_prob'] = outputs['prior_log_prob'].reshape(-1)
             outputs['pred_angles'] = outputs['pred_angles'].reshape(-1, 3)
             outputs['pred_pose_transl'] = outputs['pred_pose_transl'].reshape(-1, 3)
             outputs['pred_joint_conf'] = outputs['pred_joint_conf'].reshape(-1, 15)
         else:
             outputs['log_prob'] = outputs['log_prob'].reshape(self.num_samples, self.grasp_flow_n_samples, -1)
+            outputs['prior_log_prob'] = outputs['prior_log_prob'].reshape(self.num_samples, self.grasp_flow_n_samples, -1)
             outputs['rot_matrix'] = outputs['rot_matrix'].reshape(self.num_samples, self.grasp_flow_n_samples, 3, 3)
             outputs['transl'] = outputs['transl'].reshape(self.num_samples, self.grasp_flow_n_samples, 3)
             outputs['joint_conf'] = outputs['joint_conf'].reshape(self.num_samples, self.grasp_flow_n_samples, 15)

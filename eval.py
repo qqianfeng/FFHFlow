@@ -1,6 +1,6 @@
 import argparse
 import math
-import os
+import os, h5py
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -305,6 +305,54 @@ def compute_posterior_from_pcd(model, bps_data_array, posterior_score, num_sampl
     return res_scores_flow1, res_scores_flow2
 
 
+def save_grasp_pickle(batch):
+    path2pcd_trans = '/data/net/userstore/qf/hithand_data/data/ffhnet-data/pcd_transforms.h5'
+    pcd_data = h5py.File(path2pcd_trans, 'r')
+    res = {'method': 'FFHFlow-lvm',
+            'desc': 'grasp generation using FFHFlow-lvm',
+            'sample_grasp': {},
+            }
+    with torch.no_grad():
+        for idx in range(len(batch['obj_name'])):
+            out = model.sample(batch, idx=idx, num_samples=100)
+            obj_trans = pcd_data[batch['obj_name'][idx]]
+            id_str = batch['pcd_path'][idx][-7:-4]
+            trans_name = batch['obj_name'][idx]+'_pcd' + id_str + '_mesh_to_centroid'
+            centroid_T_mesh = obj_trans[trans_name]
+            centroid_T_mesh = utils.hom_matrix_from_pos_quat_list(centroid_T_mesh)
+            mesh_T_centroid = np.linalg.inv(centroid_T_mesh)
+
+            grasps_mesh = np.zeros((out['pred_pose_transl'].shape[0],4,4))
+            joints = np.zeros((out['pred_pose_transl'].shape[0],15))
+            log_probs = np.zeros((out['log_prob'].shape[0],1))
+            prior_log_probs = np.zeros((out['prior_log_prob'].shape[0],1))
+            for i in range(args.num_samples):
+                grasp_tmp = np.zeros((4,4))
+                grasp_tmp[:3,:3] = out['rot_matrix'][i]
+                grasp_tmp[:3,3] = out['transl'][i]
+                grasp_tmp[-1,-1] = 1
+                grasp_mesh = np.matmul(mesh_T_centroid, grasp_tmp)
+                joints[i] = out['joint_conf'][i]
+                grasps_mesh[i] = grasp_mesh
+                log_probs[i] = out['log_prob'][i]
+                prior_log_probs[i] = out['prior_log_prob'][i]
+
+            if batch['obj_name'][idx] not in res['sample_grasp']:
+                res['sample_grasp'][batch['obj_name'][idx]] = {}
+                res['sample_grasp'][batch['obj_name'][idx]]['grasp'] = grasps_mesh
+                res['sample_grasp'][batch['obj_name'][idx]]['joint'] = joints
+                res['sample_grasp'][batch['obj_name'][idx]]['log_probs'] = log_probs
+                res['sample_grasp'][batch['obj_name'][idx]]['prior_log_probs'] = prior_log_probs
+
+            else:
+                res['sample_grasp'][batch['obj_name'][idx]]['grasp'] = np.concatenate((res['sample_grasp'][batch['obj_name'][idx]]['grasp'],grasps_mesh),axis=0)
+                res['sample_grasp'][batch['obj_name'][idx]]['joint'] = np.concatenate((res['sample_grasp'][batch['obj_name'][idx]]['joint'],joints),axis=0)
+                res['sample_grasp'][batch['obj_name'][idx]]['log_probs'] = np.concatenate((res['sample_grasp'][batch['obj_name'][idx]]['log_probs'],log_probs),axis=0)
+                res['sample_grasp'][batch['obj_name'][idx]]['prior_log_probs'] = np.concatenate((res['sample_grasp'][batch['obj_name'][idx]]['prior_log_probs'],prior_log_probs),axis=0)
+            # model.show_grasps(batch['pcd_path'][idx], out, idx)
+
+    pickle.dump(res, open('res_flowlvm_wPriorFlow.pkl', 'wb'))
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
@@ -315,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
     args = parser.parse_args()
-    Visualization, MAAD, Grasps_Score, Shapes_Score = True, False, False, False
+    Visualization, MAAD, Grasps_Score, Shapes_Score, SaveGrasp = False, False, False, False, True
     cfg = get_config(args.model_cfg)
 
     # configure dataloader
@@ -378,7 +426,6 @@ if __name__ == "__main__":
 
         plt.show()
 
-
     if Grasps_Score:
         # posterior_score: None, "log_prob", "ent", "neg_kl", "pred_transl_var", "pred_log_var", "pred_pose_angle_var"，"pred_post_pose_var", "pred_pose_var"
         posterior_score = "neg_kl"
@@ -391,7 +438,6 @@ if __name__ == "__main__":
             plt.title(f"Negative and Positive Grasps {posterior_score} of {k}")
             plt.legend()
             plt.show()
-
 
     if Visualization:
         save_first_batch = False
@@ -413,7 +459,6 @@ if __name__ == "__main__":
                   posterior_score=None, 
                   o3d=True,
                   avg_grasps=False)
-    
 
     if MAAD:
         val_fn = 'data/eval_batch.pth'
@@ -425,3 +470,9 @@ if __name__ == "__main__":
         print(f"Reading val batch from file: {val_fn}")
         first_batch = torch.load(val_fn, map_location="cuda:0") 
         compute_maad(first_batch, kit_val_dataset)
+
+    if SaveGrasp:   
+        val_fn = 'data/eval_batch.pth'
+        print(f"Reading val batch from file: {val_fn}")
+        first_batch = torch.load(val_fn, map_location="cuda:0") 
+        save_grasp_pickle(first_batch)
