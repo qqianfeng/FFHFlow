@@ -33,7 +33,7 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             Dict: Dictionary containing image and mocap data dataloaders
         """
-        dset_gen = FFHGeneratorDataset(self.cfg, eval=False)
+        dset_gen = FFHGeneratorDataset(self.cfg, ds_name="train")
         train_dataloader = torch.utils.data.DataLoader(dset_gen,
                                                         batch_size=self.cfg.TRAIN.BATCH_SIZE,
                                                         shuffle=True,
@@ -42,13 +42,21 @@ class FFHDataModule(pl.LightningDataModule):
 
         return train_dataloader
 
+    def train_dataset(self):
+        """Only for eval script to get access to Dataset class in order to obstain ground truth grasps
+
+        Returns:
+            _type_: _description_
+        """
+        return FFHGeneratorDataset(self.cfg, ds_name="train")
+    
     def val_dataloader(self) -> torch.utils.data.DataLoader:
         """
         Setup val data loader.
         Returns:
             torch.utils.data.DataLoader: Validation dataloader
         """
-        dset_gen = FFHGeneratorDataset(self.cfg, eval=True)
+        dset_gen = FFHGeneratorDataset(self.cfg, ds_name="eval")
         val_dataloader = torch.utils.data.DataLoader(dset_gen,
                                                         batch_size=self.cfg.TRAIN.BATCH_SIZE,
                                                         shuffle=True,
@@ -62,4 +70,4 @@ class FFHDataModule(pl.LightningDataModule):
         Returns:
             _type_: _description_
         """
-        return FFHGeneratorDataset(self.cfg, eval=True)
+        return FFHGeneratorDataset(self.cfg, ds_name="eval")
