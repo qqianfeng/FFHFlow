@@ -29,6 +29,39 @@ Since you might want to modify the code, we recommend installing as follows:
 python setup.py develop
 ```
 
+if normflows packages cannot be properly installed
+```
+git clone https://github.com/qqianfeng/normalizing-flows.git
+cd normalizing-flows
+python setup.py install
+```
+
+## Download dataset
+Check repo of [FFHNet](https://github.com/qianbot/FFHNet)
+
+## Train
+
+### Train ffhflow-cnf
+```
+python3 train.py --model_cfg ffhflow/configs/ffhflow_cnf.yaml 
+```
+### Train ffhflow-lvm
+```
+python3 train.py --model_cfg ffhflow/configs/ffhflow_lvm.yaml
+```
+
+## Eval
+
+### Eval ffhflow-cnf
+```
+python3 eval.py --model_cfg checkpoints/flow_cnf_lr1e-4_RND2/hparams.yaml
+```
+
+### Eval lvffhflow-lvm
+```
+python3 eval.py --model_cfg checkpoints/flow_lvm_lr1e-4_RND-1_lx0260/hparams.yaml
+```
+
 ## Folder structure
 ```
 |── environment.yml
