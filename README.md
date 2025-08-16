@@ -4,7 +4,7 @@
 ![](data/sim_real_point_cloud_grasp_v3.png)
 
 ## Model Structure
-![](data/ffhflow_method_v3.png)
+![](data/ffhflow_method_v5.png)
 
 ## Installation
 
