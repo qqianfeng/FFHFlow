@@ -1,4 +1,4 @@
-# FFHFlow: A Flow-based Variational Approach for Multi-fingered Grasp Synthesis in Real Time (CoRL 2025)
+# FFHFlow: Diverse and Uncertainty-Aware Dexterous Grasp Generation via Flow Variational Inference (CoRL 2025)
 
 ## Grasp Distribution Visualization
 ![](data/sim_real_point_cloud_grasp_v3.png)
