@@ -93,8 +93,14 @@ class PositionalEncoding(nn.Module):
             Tensor: _description_
         """
         # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
-        P = torch.squeeze(P)
-        assert P.dim() == 3
+        # P = torch.squeeze(P)
+        reshaped = False
+        if P.dim() > 3:
+            reshaped = True
+            P_size_1 = P.shape[0]
+            P_size_2 = P.shape[1]
+        
+        P = P.reshape(-1, 3, 20)
         batch_size = P.shape[0]
         angle_vec = torch.zeros([batch_size,3]).to(P.device)
         pi = torch.from_numpy(np.array([2*np.pi])).to(angle_vec.device)
@@ -107,8 +113,10 @@ class PositionalEncoding(nn.Module):
         # for i in range(3):
         #     angle_vec_test[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) * torch.pow(torch.Tensor([10]).to(angle_vec.device), torch.Tensor([0.5]).to(angle_vec.device))
         # print(torch.allclose(angle_vec, angle_vec_test, atol=1e-09))
-
-        return angle_vec
+        if reshaped:
+            return angle_vec.reshape(P_size_1, P_size_2, 3)
+        else: 
+            return angle_vec
 
     def backward_transl(self, P: Tensor) -> Tensor:
         """_summary_
@@ -120,8 +128,13 @@ class PositionalEncoding(nn.Module):
             Tensor: _description_
         """
         # from sample function, batch size is 1 and P has shape of [1,num_samples,3,20]
-        P = torch.squeeze(P)
-        assert P.dim() == 3
+        reshaped = False
+        if P.dim() > 3:
+            reshaped = True
+            P_size_1 = P.shape[0]
+            P_size_2 = P.shape[1]
+
+        P = P.reshape(-1, 3, 20)
         batch_size = P.shape[0]
         transl_vec = torch.zeros([batch_size,3]).to(P.device)
         pi = torch.from_numpy(np.array([2*np.pi])).to(transl_vec.device)
@@ -135,7 +148,11 @@ class PositionalEncoding(nn.Module):
         #     transl_vec_test[:,i] = torch.atan2(P[:,i,2], P[:,i,3]) * torch.pow(torch.Tensor([10]).to(transl_vec.device), torch.Tensor([0.5]).to(transl_vec.device))
         # print(torch.allclose(transl_vec, transl_vec_test, atol=1e-09))
 
-        return transl_vec
+        if reshaped:
+            return transl_vec.reshape(P_size_1, P_size_2, 3)
+        else: 
+            return transl_vec
+
 
     def backward2(self, P: Tensor) -> Tensor:
         """_summary_

@@ -148,6 +148,7 @@ class GraspFlowGenerator(nn.Module):
         assert z is None
         # Generates samples from the distribution together with their log probability.
         samples, log_prob = self.flow.sample(num_samples, context=feats)
+        log_prob = log_prob.reshape(batch_size, num_samples)
         pred_params = samples.reshape(batch_size, num_samples, -1)
 
         if self.positional_encoding:

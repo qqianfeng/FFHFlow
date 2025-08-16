@@ -261,9 +261,16 @@ def hom_matrix_from_transl_rot_matrix(transl, rot_matrix):
     Returns:
         hom_matrix (array): 4x4 homogenous transform.
     """
-    hom_matrix = np.eye(4)
-    hom_matrix[:3, :3] = rot_matrix
-    hom_matrix[:3, 3] = transl
+    if len(rot_matrix.shape) > 2:
+        batch_size = rot_matrix.shape[0]
+        hom_matrix = np.eye(4)
+        hom_matrix = np.tile(hom_matrix, (batch_size, 1, 1))
+        hom_matrix[:, :3, :3] = rot_matrix
+        hom_matrix[:, :3, 3] = transl
+    else:
+        hom_matrix = np.eye(4)
+        hom_matrix[:3, :3] = rot_matrix
+        hom_matrix[:3, 3] = transl
     return hom_matrix
 
 
