@@ -306,7 +306,6 @@ def compute_posterior_from_pcd(model, bps_data_array, posterior_score, num_sampl
 
 
 def save_grasp_pickle(batch):
-    path2pcd_trans = '/data/net/userstore/qf/hithand_data/data/ffhnet-data/pcd_transforms.h5'
     pcd_data = h5py.File(path2pcd_trans, 'r')
     res = {'method': 'FFHFlow-lvm',
             'desc': 'grasp generation using FFHFlow-lvm',
@@ -356,15 +355,15 @@ def save_grasp_pickle(batch):
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Probabilistic skeleton lifting training code')
-    parser.add_argument('--model_cfg', type=str, default='/home/jianxiang.feng/Projects/ffhflow_stash/FFHFlow_lx0217/checkpoints/flow_lvm_lr1e-4_RND-1_lx0260_localENV/hparams.yaml', help='Path to config file')
-    parser.add_argument('--ckpt_path', type=str, default='/home/jianxiang.feng/Projects/ffhflow_stash/FFHFlow_lx0217/checkpoints/flow_lvm_lr1e-4_RND-1_lx0260_localENV/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
-    # parser.add_argument('--model_cfg', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/hparams.yaml', help='Path to config file')
-    # parser.add_argument('--ckpt_path', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
+    parser.add_argument('--model_cfg', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/hparams.yaml', help='Path to config file')
+    parser.add_argument('--ckpt_path', type=str, default='/data/net/userstore/qf/ffhflow_models/ffhflow_lvm/epoch=16-step=199999.ckpt', help='Directory to save logs and checkpoints')
     parser.add_argument('--num_samples', type=float, default=100, help='Number of grasps to be generated for evaluation.')
 
     args = parser.parse_args()
     Visualization, MAAD, Grasps_Score, Shapes_Score, SaveGrasp = False, False, False, False, True
     cfg = get_config(args.model_cfg)
+
+    path2pcd_trans = '/home/qf/Downloads/ffhnet-data/pcd_transforms.h5'
 
     # configure dataloader
     cfg["TRAIN"]["BATCH_SIZE"] = 64 # *8
