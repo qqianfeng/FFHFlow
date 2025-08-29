@@ -56,6 +56,12 @@ python3 train.py --model_cfg ffhflow/configs/ffhflow_cnf.yaml
 python3 train.py --model_cfg ffhflow/configs/ffhflow_lvm.yaml
 ```
 
+### checkpoints
+
+```
+https://drive.google.com/file/d/17v42v2G1bLY14RnHjGXFoc94jb6WdUll/view?usp=sharing
+```
+
 ## Eval
 
 ### Eval ffhflow-cnf
